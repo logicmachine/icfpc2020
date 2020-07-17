@@ -11,10 +11,10 @@ import pathlib
 import requests
 
 def is_number(s):
-    return s.isdigit()
+    return s.isdigit() or (s[0] == '-' and s[1:].isdigit())
 
 def is_colon_number(s):
-    return s[1:].isdigit()
+    return s[0] == ":" and s[1:].isdigit()
 
 def main():
     if pathlib.Path("galaxy.txt").exists():
