@@ -41,7 +41,7 @@ Node parse(std::istream& is){
 	is >> token;
 	if(token == ""){ throw std::runtime_error("empty token"); }
 	Node node;
-	if(std::isdigit(token[0])){
+	if(token[0] == '-' || std::isdigit(token[0])){
 		node.kind = Kind::NUMBER;
 		node.number = std::stol(token);
 	}else if(token == "ap"){
@@ -77,12 +77,12 @@ private:
 	public:
 		T1(NodePtr arg0) : m_arg0(std::move(arg0)) { }
 		virtual ObjectPtr call(NodePtr arg1){
-			return Impl::call(m_arg0, std::move(arg1));
+			return Impl::call(m_arg0, arg1);
 		}
 	};
 public:
 	virtual ObjectPtr call(NodePtr arg){
-		return std::make_shared<T1>(std::move(arg));
+		return std::make_shared<T1>(arg);
 	}
 };
 
@@ -95,7 +95,7 @@ private:
 	public:
 		T2(NodePtr arg0, NodePtr arg1) : m_arg0(std::move(arg0)), m_arg1(std::move(arg1)) { }
 		virtual ObjectPtr call(NodePtr arg2){
-			return Impl::call(m_arg0, m_arg1, std::move(arg2));
+			return Impl::call(m_arg0, m_arg1, arg2);
 		}
 	};
 	class T1 : public Object {
@@ -104,12 +104,12 @@ private:
 	public:
 		T1(NodePtr arg0) : m_arg0(std::move(arg0)) { }
 		virtual ObjectPtr call(NodePtr arg1){
-			return std::make_shared<T2>(m_arg0, std::move(arg1));
+			return std::make_shared<T2>(m_arg0, arg1);
 		}
 	};
 public:
 	virtual ObjectPtr call(NodePtr arg){
-		return std::make_shared<T1>(std::move(arg));
+		return std::make_shared<T1>(arg);
 	}
 };
 
@@ -168,7 +168,7 @@ using Div = ObjectHelper2<DivImpl>;
 // #21 - True (K Combinator)
 struct TrueImpl {
 	static ObjectPtr call(NodePtr x0, NodePtr){
-		return evaluate(std::move(x0));
+		return evaluate(x0);
 	}
 };
 using True = ObjectHelper2<TrueImpl>;
@@ -176,7 +176,7 @@ using True = ObjectHelper2<TrueImpl>;
 // #22 - False
 struct FalseImpl {
 	static ObjectPtr call(NodePtr, NodePtr x1){
-		return evaluate(std::move(x1));
+		return evaluate(x1);
 	}
 };
 using False = ObjectHelper2<FalseImpl>;
@@ -184,8 +184,8 @@ using False = ObjectHelper2<FalseImpl>;
 // #11 - Equality and Booleans
 struct EqImpl {
 	static ObjectPtr call(NodePtr x0, NodePtr x1){
-		const long x = evaluate(std::move(x0))->value();
-		const long y = evaluate(std::move(x1))->value();
+		const long x = evaluate(x0)->value();
+		const long y = evaluate(x1)->value();
 		if(x == y){
 			return std::make_shared<True>();
 		}else{
@@ -198,8 +198,8 @@ using Eq = ObjectHelper2<EqImpl>;
 // #12 - Strict Less Than
 struct LtImpl {
 	static ObjectPtr call(NodePtr x0, NodePtr x1){
-		const long x = evaluate(std::move(x0))->value();
-		const long y = evaluate(std::move(x1))->value();
+		const long x = evaluate(x0)->value();
+		const long y = evaluate(x1)->value();
 		if(x < y){
 			return std::make_shared<True>();
 		}else{
@@ -212,7 +212,7 @@ using Lt = ObjectHelper2<LtImpl>;
 // #16 - Negate
 struct Negate : public Object {
 	virtual ObjectPtr call(NodePtr x0) override {
-		return std::make_shared<Number>(-evaluate(std::move(x0))->value());
+		return std::make_shared<Number>(-evaluate(x0)->value());
 	}
 };
 
@@ -221,9 +221,9 @@ struct SImpl {
 	static ObjectPtr call(NodePtr x0, NodePtr x1, NodePtr x2){
 		auto tmp = std::make_shared<Node>();
 		tmp->kind = Kind::APPLY;
-		tmp->fn   = std::move(x1);
+		tmp->fn   = x1;
 		tmp->arg  = x2;
-		return evaluate(x0)->call(std::move(x2))->call(std::move(tmp));
+		return evaluate(x0)->call(x2)->call(tmp);
 	}
 };
 using S = ObjectHelper3<SImpl>;
@@ -231,7 +231,7 @@ using S = ObjectHelper3<SImpl>;
 // #19 - C Combinator
 struct CImpl {
 	static ObjectPtr call(NodePtr x0, NodePtr x1, NodePtr x2){
-		return evaluate(std::move(x0))->call(std::move(x2))->call(std::move(x1));
+		return evaluate(x0)->call(x2)->call(x1);
 	}
 };
 using C = ObjectHelper3<CImpl>;
@@ -241,9 +241,9 @@ struct BImpl {
 	static ObjectPtr call(NodePtr x0, NodePtr x1, NodePtr x2){
 		auto tmp = std::make_shared<Node>();
 		tmp->kind = Kind::APPLY;
-		tmp->fn   = std::move(x1);
-		tmp->arg  = std::move(x2);
-		return evaluate(std::move(x0))->call(std::move(tmp));
+		tmp->fn   = x1;
+		tmp->arg  = x2;
+		return evaluate(x0)->call(tmp);
 	}
 };
 using B = ObjectHelper3<BImpl>;
@@ -251,7 +251,7 @@ using B = ObjectHelper3<BImpl>;
 // #24 - I Combinator
 struct I : public Object {
 	virtual ObjectPtr call(NodePtr x0) override {
-		return evaluate(std::move(x0));
+		return evaluate(x0);
 	}
 };
 
@@ -264,7 +264,7 @@ private:
 	public:
 		Cons2(NodePtr arg0, NodePtr arg1) : m_arg0(arg0), m_arg1(arg1) { }
 		virtual ObjectPtr call(NodePtr arg2) override {
-			return evaluate(std::move(arg2))->call(m_arg0)->call(m_arg1);
+			return evaluate(arg2)->call(m_arg0)->call(m_arg1);
 		}
 		virtual void dump(std::ostream& os) const override {
 			os << "(";
@@ -295,7 +295,7 @@ struct Car : public Object {
 		auto tmp = std::make_shared<Node>();
 		tmp->kind = Kind::REFERENCE;
 		tmp->key  = "t";
-		return evaluate(x0)->call(std::move(tmp));
+		return evaluate(x0)->call(tmp);
 	}
 };
 
@@ -305,7 +305,7 @@ struct Cdr : public Object {
 		auto tmp = std::make_shared<Node>();
 		tmp->kind = Kind::REFERENCE;
 		tmp->key  = "f";
-		return evaluate(x0)->call(std::move(tmp));
+		return evaluate(x0)->call(tmp);
 	}
 };
 
@@ -323,7 +323,7 @@ public:
 class IsNil : public Object {
 public:
 	virtual ObjectPtr call(NodePtr arg) override {
-		if(evaluate(std::move(arg))->is_nil()){
+		if(evaluate(arg)->is_nil()){
 			return std::make_shared<True>();
 		}else{
 			return std::make_shared<False>();
@@ -356,9 +356,11 @@ std::shared_ptr<Object> evaluate(NodePtr node){
 		if(node->key == "cdr")  { return std::make_shared<Cdr>();    }
 		if(node->key == "nil")  { return std::make_shared<Nil>();    }
 		if(node->key == "isnil"){ return std::make_shared<IsNil>();  }
-		return evaluate(g_slots[k]);
+		auto t = evaluate(g_slots[k]);
+		return t;
 	}else if(node->kind == Kind::APPLY){
-		return evaluate(node->fn)->call(node->arg);
+		auto t = evaluate(node->fn)->call(node->arg);
+		return t;
 	}
 	return nullptr;
 }
