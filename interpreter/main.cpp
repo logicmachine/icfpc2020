@@ -575,7 +575,7 @@ struct InteractImpl {
 		}else{
 			auto ret   = apply(std::make_shared<Cdr>(), t);
 			auto state = apply(std::make_shared<Car>(), ret);
-			auto data  = apply(std::make_shared<Cdr>(), ret);
+			auto data  = apply(std::make_shared<Car>(), apply(std::make_shared<Cdr>(), ret));
 			auto recv  = apply(std::make_shared<Send>(), data);
 			auto interact = std::make_shared<ObjectHelper3<InteractImpl>>();
 			return interact->call(protocol)->call(as_node(state))->call(as_node(recv));
