@@ -388,7 +388,7 @@ private:
 				os << "010";
 			}else{
 				const long y = std::abs(x);
-				os << (x < 0 ? "01" : "10");
+				os << (x >= 0 ? "01" : "10");
 				const int bits = (sizeof(long) * 8 - __builtin_clzl(y) + 3) & ~3;
 				for(int i = 0; i < bits; i += 4){ os << "1"; }
 				os << "0";
