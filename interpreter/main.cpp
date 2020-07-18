@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -11,9 +12,10 @@ class Object;
 using ObjectPtr = std::shared_ptr<Object>;
 
 enum class Kind {
-	NUMBER    = 0,
-	REFERENCE = 1,
-	APPLY     = 2,
+	OBJECT    = 0,
+	NUMBER    = 1,
+	REFERENCE = 2,
+	APPLY     = 3,
 };
 
 struct Node {
@@ -115,6 +117,21 @@ public:
 };
 
 ObjectPtr evaluate(NodePtr node);
+
+NodePtr as_node(ObjectPtr obj){
+	auto node = std::make_shared<Node>();
+	node->kind  = Kind::OBJECT;
+	node->cache = obj;
+	return node;
+}
+
+ObjectPtr apply(ObjectPtr fn, ObjectPtr arg){
+	auto node = std::make_shared<Node>();
+	node->kind = Kind::APPLY;
+	node->fn   = as_node(fn);
+	node->arg  = as_node(arg);
+	return evaluate(node);
+}
 
 // #1, 2, 3 - Numbers
 struct Number : public Object {
@@ -332,32 +349,66 @@ public:
 	}
 };
 
+// #37 - Is Zero
+class IsZero : public Object {
+public:
+	virtual ObjectPtr call(NodePtr arg) override {
+		if(evaluate(arg)->is_zero()){
+			return std::make_shared<True>();
+		}else{
+			return std::make_shared<False>();
+		}
+	}
+};
+
+// #38 - Interact
+struct InteractImpl {
+	static ObjectPtr call(NodePtr protocol, NodePtr state, NodePtr vector){
+		auto t = evaluate(protocol)->call(state)->call(vector);
+		auto flag = apply(std::make_shared<Car>(), t);
+		if(flag->value() == 0){
+			// TODO multipledraw
+			auto ret = apply(std::make_shared<Cdr>(), t);
+			g_slots[":state"] = as_node(apply(std::make_shared<Car>(), ret));
+			return ret;
+		}else{
+			// TODO send
+			throw std::runtime_error("send is not implemented");
+			return nullptr;
+		}
+	}
+};
+using Interact = ObjectHelper3<InteractImpl>;
+
+
 std::shared_ptr<Object> evaluate(NodePtr node){
 	auto factory = [&]() -> ObjectPtr {
 		if(node->kind == Kind::NUMBER){
 			return std::make_shared<Number>(node->number);
 		}else if(node->kind == Kind::REFERENCE){
 			const auto& k = node->key;
-			if(node->key == "inc")  { return std::make_shared<Inc>();    }
-			if(node->key == "dec")  { return std::make_shared<Dec>();    }
-			if(node->key == "add")  { return std::make_shared<Sum>();    }
-			if(node->key == "mul")  { return std::make_shared<Prod>();   }
-			if(node->key == "div")  { return std::make_shared<Div>();    }
-			if(node->key == "eq")   { return std::make_shared<Eq>();     }
-			if(node->key == "lt")   { return std::make_shared<Lt>();     }
-			if(node->key == "neg")  { return std::make_shared<Negate>(); }
-			if(node->key == "s")    { return std::make_shared<S>();      }
-			if(node->key == "c")    { return std::make_shared<C>();      }
-			if(node->key == "b")    { return std::make_shared<B>();      }
-			if(node->key == "t")    { return std::make_shared<True>();   }
-			if(node->key == "f")    { return std::make_shared<False>();  }
+			if(node->key == "inc")     { return std::make_shared<Inc>();      }
+			if(node->key == "dec")     { return std::make_shared<Dec>();      }
+			if(node->key == "add")     { return std::make_shared<Sum>();      }
+			if(node->key == "mul")     { return std::make_shared<Prod>();     }
+			if(node->key == "div")     { return std::make_shared<Div>();      }
+			if(node->key == "eq")      { return std::make_shared<Eq>();       }
+			if(node->key == "lt")      { return std::make_shared<Lt>();       }
+			if(node->key == "neg")     { return std::make_shared<Negate>();   }
+			if(node->key == "s")       { return std::make_shared<S>();        }
+			if(node->key == "c")       { return std::make_shared<C>();        }
+			if(node->key == "b")       { return std::make_shared<B>();        }
+			if(node->key == "t")       { return std::make_shared<True>();     }
+			if(node->key == "f")       { return std::make_shared<False>();    }
 			// TODO pwr2
-			if(node->key == "i")    { return std::make_shared<I>();      }
-			if(node->key == "cons") { return std::make_shared<Cons>();   }
-			if(node->key == "car")  { return std::make_shared<Car>();    }
-			if(node->key == "cdr")  { return std::make_shared<Cdr>();    }
-			if(node->key == "nil")  { return std::make_shared<Nil>();    }
-			if(node->key == "isnil"){ return std::make_shared<IsNil>();  }
+			if(node->key == "i")       { return std::make_shared<I>();        }
+			if(node->key == "cons")    { return std::make_shared<Cons>();     }
+			if(node->key == "car")     { return std::make_shared<Car>();      }
+			if(node->key == "cdr")     { return std::make_shared<Cdr>();      }
+			if(node->key == "nil")     { return std::make_shared<Nil>();      }
+			if(node->key == "isnil")   { return std::make_shared<IsNil>();    }
+			if(node->key == "if0")     { return std::make_shared<IsZero>();   }
+			if(node->key == "interact"){ return std::make_shared<Interact>(); }
 			auto t = evaluate(g_slots[k]);
 			return t;
 		}else if(node->kind == Kind::APPLY){
@@ -373,17 +424,35 @@ std::shared_ptr<Object> evaluate(NodePtr node){
 
 
 int main(int argc, char *argv[]){
+	if(argc < 2){
+		std::cerr << "Usage: " << argv[0] << " setup" << std::endl;
+		return 0;
+	}
+
 	std::string line;
-	while(std::getline(std::cin, line)){
+
+	std::ifstream ifs(argv[1]);
+	while(std::getline(ifs, line)){
 		std::istringstream iss(line);
 		std::string key, eq;
 		iss >> key >> eq;
 		g_slots[key] = std::make_shared<Node>(parse(iss));
-		// evaluate(std::make_shared<Node>(parse(iss)))->dump(std::cout);
-		// std::cout << std::endl;
 	}
-	evaluate(g_slots[argv[1]])->dump(std::cout);
-	std::cout << std::endl;
+
+	auto state = std::make_shared<Node>();
+	state->kind  = Kind::OBJECT;
+	state->cache = std::make_shared<Nil>();
+	g_slots[":state"] = state;
+
+	while(true){
+		std::cout << "> " << std::flush;
+		if(!std::getline(std::cin, line)){ break; }
+		std::istringstream iss(line);
+		auto root = std::make_shared<Node>(parse(iss));
+		evaluate(root)->dump(std::cout);
+		std::cout << std::endl;
+	}
+
 	return 0;
 }
 
