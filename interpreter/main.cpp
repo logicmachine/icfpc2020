@@ -1,3 +1,4 @@
+// g++ main.cpp -lcurl
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -7,6 +8,10 @@
 #include <memory>
 #include <stdexcept>
 #include <cstdint>
+
+extern "C" {
+#include <curl/curl.h>
+}
 
 class Object;
 using ObjectPtr = std::shared_ptr<Object>;
@@ -505,11 +510,30 @@ public:
 
 // #15 - Send
 struct Send : public Object {
+private:
+	static size_t callback(char *buffer, size_t size, size_t nmemb, void *userdata){
+		std::vector<char> *v = reinterpret_cast<std::vector<char>*>(userdata);
+		v->reserve(v->size() + size * nmemb + 1);
+		for(size_t i = 0; i < size * nmemb; ++i){ v->push_back(buffer[i]); }
+		return size * nmemb;
+	}
+public:
 	virtual ObjectPtr call(NodePtr arg) override {
 		const auto signal = apply(std::make_shared<Modulate>(), evaluate(arg));
-		std::cerr << "Send: " << signal->modulated() << std::endl << "? " << std::flush;
-		std::string received;
-		std::cin >> received;
+		const auto modulated = signal->modulated();
+		std::cerr << "Send: " << modulated << std::endl;
+		const char *url = "https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=b0a3d915b8d742a39897ab4dab931721";
+		CURL *curl = curl_easy_init();
+		std::vector<char> received_raw;
+		curl_easy_setopt(curl, CURLOPT_URL, url);
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, modulated.c_str());
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &received_raw);
+		curl_easy_perform(curl);
+		curl_easy_cleanup(curl);
+		received_raw.push_back('\0');
+		const std::string received(received_raw.data());
+		std::cerr << "Recv: " << received << std::endl;
 		return apply(std::make_shared<Demodulate>(), std::make_shared<Modulated>(received));
 	}
 };
@@ -641,6 +665,8 @@ std::shared_ptr<Object> evaluate(NodePtr node){
 
 
 int main(int argc, char *argv[]){
+	curl_global_init(CURL_GLOBAL_ALL);
+
 	if(argc < 2){
 		std::cerr << "Usage: " << argv[0] << " setup" << std::endl;
 		return 0;
@@ -676,6 +702,7 @@ int main(int argc, char *argv[]){
 		g_image_writer.reset();
 	}
 
+	curl_global_cleanup();
 	return 0;
 }
 
