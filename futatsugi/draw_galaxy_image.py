@@ -8,6 +8,7 @@ from PIL import Image
 
 def main(args):
     data = args[1]
+    outfile = args[2]
     data = data.replace("(", "").replace(")", "").replace("nil", "").replace(",", " ").strip()
     data = list(map(int, data.split()))
     pos = []
@@ -24,7 +25,7 @@ def main(args):
     for p in post:
         im.putpixel(p, (255, 255, 255))
     #im.save("state11a.jpg")
-    im.save("temp01.jpg")
+    im.save(outfile)
 
 
 if __name__ == "__main__":
