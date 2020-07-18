@@ -22,6 +22,7 @@ struct Node {
 	std::string key;
 	std::shared_ptr<Node> fn;
 	std::shared_ptr<Node> arg;
+	ObjectPtr cache;
 };
 using NodePtr = std::shared_ptr<Node>;
 
@@ -332,37 +333,42 @@ public:
 };
 
 std::shared_ptr<Object> evaluate(NodePtr node){
-	if(node->kind == Kind::NUMBER){
-		return std::make_shared<Number>(node->number);
-	}else if(node->kind == Kind::REFERENCE){
-		const auto& k = node->key;
-		if(node->key == "inc")  { return std::make_shared<Inc>();    }
-		if(node->key == "dec")  { return std::make_shared<Dec>();    }
-		if(node->key == "add")  { return std::make_shared<Sum>();    }
-		if(node->key == "mul")  { return std::make_shared<Prod>();   }
-		if(node->key == "div")  { return std::make_shared<Div>();    }
-		if(node->key == "eq")   { return std::make_shared<Eq>();     }
-		if(node->key == "lt")   { return std::make_shared<Lt>();     }
-		if(node->key == "neg")  { return std::make_shared<Negate>(); }
-		if(node->key == "s")    { return std::make_shared<S>();      }
-		if(node->key == "c")    { return std::make_shared<C>();      }
-		if(node->key == "b")    { return std::make_shared<B>();      }
-		if(node->key == "t")    { return std::make_shared<True>();   }
-		if(node->key == "f")    { return std::make_shared<False>();  }
-		// TODO pwr2
-		if(node->key == "i")    { return std::make_shared<I>();      }
-		if(node->key == "cons") { return std::make_shared<Cons>();   }
-		if(node->key == "car")  { return std::make_shared<Car>();    }
-		if(node->key == "cdr")  { return std::make_shared<Cdr>();    }
-		if(node->key == "nil")  { return std::make_shared<Nil>();    }
-		if(node->key == "isnil"){ return std::make_shared<IsNil>();  }
-		auto t = evaluate(g_slots[k]);
-		return t;
-	}else if(node->kind == Kind::APPLY){
-		auto t = evaluate(node->fn)->call(node->arg);
-		return t;
-	}
-	return nullptr;
+	auto factory = [&]() -> ObjectPtr {
+		if(node->kind == Kind::NUMBER){
+			return std::make_shared<Number>(node->number);
+		}else if(node->kind == Kind::REFERENCE){
+			const auto& k = node->key;
+			if(node->key == "inc")  { return std::make_shared<Inc>();    }
+			if(node->key == "dec")  { return std::make_shared<Dec>();    }
+			if(node->key == "add")  { return std::make_shared<Sum>();    }
+			if(node->key == "mul")  { return std::make_shared<Prod>();   }
+			if(node->key == "div")  { return std::make_shared<Div>();    }
+			if(node->key == "eq")   { return std::make_shared<Eq>();     }
+			if(node->key == "lt")   { return std::make_shared<Lt>();     }
+			if(node->key == "neg")  { return std::make_shared<Negate>(); }
+			if(node->key == "s")    { return std::make_shared<S>();      }
+			if(node->key == "c")    { return std::make_shared<C>();      }
+			if(node->key == "b")    { return std::make_shared<B>();      }
+			if(node->key == "t")    { return std::make_shared<True>();   }
+			if(node->key == "f")    { return std::make_shared<False>();  }
+			// TODO pwr2
+			if(node->key == "i")    { return std::make_shared<I>();      }
+			if(node->key == "cons") { return std::make_shared<Cons>();   }
+			if(node->key == "car")  { return std::make_shared<Car>();    }
+			if(node->key == "cdr")  { return std::make_shared<Cdr>();    }
+			if(node->key == "nil")  { return std::make_shared<Nil>();    }
+			if(node->key == "isnil"){ return std::make_shared<IsNil>();  }
+			auto t = evaluate(g_slots[k]);
+			return t;
+		}else if(node->kind == Kind::APPLY){
+			auto t = evaluate(node->fn)->call(node->arg);
+			return t;
+		}
+		return nullptr;
+	};
+	if(node->cache){ return node->cache; }
+	node->cache = factory();
+	return node->cache;
 }
 
 
