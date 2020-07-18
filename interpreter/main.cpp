@@ -507,8 +507,7 @@ public:
 struct Send : public Object {
 	virtual ObjectPtr call(NodePtr arg) override {
 		const auto signal = apply(std::make_shared<Modulate>(), evaluate(arg));
-		std::cout << "Send: " << signal->modulated() << std::endl;
-		std::cout << "? " << std::flush;
+		std::cerr << "Send: " << signal->modulated() << std::endl << "? " << std::flush;
 		std::string received;
 		std::cin >> received;
 		return apply(std::make_shared<Demodulate>(), std::make_shared<Modulated>(received));
@@ -526,7 +525,18 @@ public:
 	explicit Picture(std::vector<std::pair<int, int>> coords) : m_coords(std::move(coords)) { }
 	virtual ObjectPtr call(NodePtr) override { throw std::runtime_error("picture is not a callable"); }
 	virtual void dump(std::ostream& os) const override {
+#ifdef PICTURE_DETAILED
+		bool is_first = true;
+		os << "|";
+		for(const auto& p : m_coords){
+			if(!is_first){ os << ", "; }
+			is_first = false;
+			os << "(" << p.first << ", " << p.second << ")";
+		}
+		os << "|";
+#else
 		os << "|picture|";
+#endif
 		g_image_writer.push(m_coords);
 	}
 };
