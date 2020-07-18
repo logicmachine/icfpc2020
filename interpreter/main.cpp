@@ -61,6 +61,66 @@ Node parse(std::istream& is){
 static std::map<std::string, std::shared_ptr<Node>> g_slots;
 
 //----------------------------------------------------------------------------
+// Image I/O
+//----------------------------------------------------------------------------
+class ImageWriter {
+private:
+	static const uint8_t PALETTE[10][3];
+	std::vector<std::vector<std::pair<int, int>>> m_coords;
+public:
+	void push(std::vector<std::pair<int, int>> coords){
+		m_coords.push_back(std::move(coords));
+	}
+	void reset(){ m_coords.clear(); }
+	void write(const std::string& name) const {
+		if(m_coords.empty()){ return; }
+		int min_x = 0, max_x = 0, min_y = 0, max_y = 0;
+		for(const auto& v : m_coords){
+			for(const auto& p : v){
+				min_x = std::min(min_x, p.first);
+				max_x = std::max(max_x, p.first);
+				min_y = std::min(min_y, p.second);
+				max_y = std::max(max_y, p.second);
+			}
+		}
+		const int width  = max_x - min_x + 1;
+		const int height = max_y - min_y + 1;
+		std::vector<uint8_t> data(width * height * 3, 0);
+		for(size_t i = 0; i < m_coords.size(); ++i){
+			const auto color = &PALETTE[i % 10][0];
+			for(const auto& p : m_coords[i]){
+				const int x = p.first  - min_x;
+				const int y = p.second - min_y;
+				const int k = x * 3 + y * width * 3;
+				data[k + 0] = color[0];
+				data[k + 1] = color[1];
+				data[k + 2] = color[2];
+			}
+		}
+		std::ofstream ofs(name, std::ios::binary);
+		ofs << "P6\n";
+		ofs << width << " " << height << "\n";
+		ofs << "255\n";
+		ofs.write(reinterpret_cast<char*>(data.data()), data.size());
+		ofs.close();
+		std::cerr << "ImageWriter: " << name << " (" << min_x << ", " << min_y << ")" << std::endl;
+	}
+};
+const uint8_t ImageWriter::PALETTE[10][3] = {
+	{  31, 119, 180 },
+	{ 255, 127,  14 },
+	{  44, 160,  44 },
+	{ 214,  39,  40 },
+	{ 148, 103, 189 },
+	{ 140,  86,  75 },
+	{ 227, 119, 194 },
+	{ 127, 127, 127 },
+	{ 188, 189,  34 },
+	{  23, 190, 207 }
+};
+static ImageWriter g_image_writer;
+
+//----------------------------------------------------------------------------
 // Function declarations
 //----------------------------------------------------------------------------
 struct Object {
@@ -455,22 +515,68 @@ struct Send : public Object {
 	}
 };
 
+// #31 - Vector
+using Vector = Cons;
+
+// #32 - Draw
+struct Picture : public Object {
+private:
+	std::vector<std::pair<int, int>> m_coords;
+public:
+	explicit Picture(std::vector<std::pair<int, int>> coords) : m_coords(std::move(coords)) { }
+	virtual ObjectPtr call(NodePtr) override { throw std::runtime_error("picture is not a callable"); }
+	virtual void dump(std::ostream& os) const override {
+		os << "|picture|";
+		g_image_writer.push(m_coords);
+	}
+};
+
+struct Draw : public Object {
+	virtual ObjectPtr call(NodePtr arg) override {
+		std::vector<std::pair<int, int>> coords;
+		auto cur = evaluate(arg);
+		while(!cur->is_nil()){
+			auto p = apply(std::make_shared<Car>(), cur);
+			const int x = apply(std::make_shared<Car>(), p)->number();
+			const int y = apply(std::make_shared<Cdr>(), p)->number();
+			coords.emplace_back(x, y);
+			cur = apply(std::make_shared<Cdr>(), cur);
+		}
+		return std::make_shared<Picture>(std::move(coords));
+	}
+};
+
+// #34 - Multiple Draw
+struct MultipleDraw : public Object {
+	virtual ObjectPtr call(NodePtr arg) override {
+		auto cur = evaluate(arg);
+		if(cur->is_nil()){ return std::make_shared<Nil>(); }
+		auto first = apply(std::make_shared<Car>(), cur);
+		auto tail  = apply(std::make_shared<Cdr>(), cur);
+		return std::make_shared<Cons>()
+			->call(as_node(apply(std::make_shared<Draw>(), first)))
+			->call(as_node(apply(std::make_shared<MultipleDraw>(), tail)));
+	}
+};
+
 // #38 - Interact
 struct InteractImpl {
 	static ObjectPtr call(NodePtr protocol, NodePtr state, NodePtr vector){
 		auto t = evaluate(protocol)->call(state)->call(vector);
 		auto flag = apply(std::make_shared<Car>(), t);
 		if(flag->number() == 0){
-			// TODO multipledraw
 			auto ret = apply(std::make_shared<Cdr>(), t);
-			g_slots[":state"] = as_node(apply(std::make_shared<Car>(), ret));
-			return ret;
+			auto state = apply(std::make_shared<Car>(), ret);
+			auto data  = apply(std::make_shared<Car>(), apply(std::make_shared<Cdr>(), ret));
+			g_slots[":state"] = as_node(state);
+			return std::make_shared<Cons>()
+				->call(as_node(state))
+				->call(as_node(apply(std::make_shared<MultipleDraw>(), data)));
 		}else{
 			auto ret   = apply(std::make_shared<Cdr>(), t);
 			auto state = apply(std::make_shared<Car>(), ret);
 			auto data  = apply(std::make_shared<Cdr>(), ret);
 			auto recv  = apply(std::make_shared<Send>(), data);
-recv->dump(std::cout); std::cout << std::endl;
 			auto interact = std::make_shared<ObjectHelper3<InteractImpl>>();
 			return interact->call(protocol)->call(as_node(state))->call(as_node(recv));
 		}
@@ -556,6 +662,8 @@ int main(int argc, char *argv[]){
 		evaluate(root)->dump(std::cout);
 		std::cout << std::endl;
 		if(line[0] == ':' && line.find('=') != std::string::npos){ g_slots[key] = root; }
+		g_image_writer.write("output.pnm");
+		g_image_writer.reset();
 	}
 
 	return 0;
