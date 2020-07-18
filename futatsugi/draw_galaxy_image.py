@@ -4,6 +4,7 @@ import sys
 import os
 import re
 import numpy as np
+from PIL import Image
 
 def main(args):
     data = args[1]
@@ -15,29 +16,15 @@ def main(args):
     pos = np.array(pos)
     minr = min(pos[:,0])
     minc = min(pos[:,1])
-    maxr = max(pos[:,0])
-    maxc = max(pos[:,1])
-    print("min: {}, {}".format(minr, minc))
-    print("max: {}, {}".format(maxr, maxc))
-    print("center: {}, {}".format((minr+maxr)/2, (minc+maxc)/2))
-    """
-    rows = []
-    cols = []
-    for row in pos:
-        rows.append(row[0])
-        cols.append(row[1])
-    print(rows)
-    print(cols)
-    """
     pos -= np.array([minr, minc])
     post = []
     for row in pos:
         post.append(tuple(row))
-    print(post)
-    for j in range(max(pos[:,1]+1)):
-        for i in range(max(pos[:,0]+1)):
-            print("■" if (i, j) in post else "　", end="")
-        print()
+    im = Image.new("RGB", (max(pos[:,0])+1, max(pos[:,1])+1))
+    for p in post:
+        im.putpixel(p, (255, 255, 255))
+    #im.save("state11a.jpg")
+    im.save("temp01.jpg")
 
 
 if __name__ == "__main__":
