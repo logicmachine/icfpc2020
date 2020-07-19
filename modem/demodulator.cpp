@@ -53,10 +53,8 @@ Element decode(const char *&p){
 		}
 		++p;
 		long long int value = 0;
-        fprintf(stderr, "depth = %d\n", depth);
 		for(int i = 0; i < depth; ++i){
 			value = (value << 1) | (*p - '0');
-            fprintf(stderr, "value = %lld\n", value);
 			++p;
 		}
 		return Element(value * sign);
