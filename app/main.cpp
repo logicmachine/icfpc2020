@@ -49,7 +49,7 @@ public:
         returnedStatus = 0;
     }
     
-    std::string modulate(const std::string& command) const {
+    std::string modulate_word(const std::string& command) const {
         if(command == "cons") return "11";
         if(command == "nil") return "00";
         if(command == "ap") assert(false);
@@ -68,11 +68,12 @@ public:
         return result;
     }
 
-    std::string modulate(const std::vector< std::string >& commands) const {
-        std::string result = "";
-        for(const auto& command : commands) {
-            if(command == "ap") continue;
-            result += modulate(command);
+    std::string modulate(const std::string& commands) const {
+        std::stringstream stream(commands);
+        std::string result = "", command;
+        while(getline(stream, command, ' ')) {
+            if(command == "ap" or command.empty()) continue;
+            result += modulate_word(command);
         }
         return result;
     }
@@ -113,7 +114,8 @@ public:
         // join
         std::string joinCmd = makeJoinRequest(playerKey);
         std::cout << "join request = " << joinCmd << std::endl;
-        response = send(joinCmd);
+        std::cout << "modulated join request = " << modulate(joinCmd) << std::endl;
+        response = send(modulate(joinCmd));
         std::cout << "join response = " << response << std::endl;
         
         // start
