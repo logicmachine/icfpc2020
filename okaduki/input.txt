@@ -1,0 +1,13 @@
+11
+ap ap ap interact galaxy ap ap cons 2 ap ap cons ap ap cons 1 ap ap cons -1 nil ap ap cons 0 ap ap cons nil nil ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons 0 0
+ap ap ap interact galaxy :state ap ap cons -18 0
+ap ap ap interact galaxy :state ap ap cons -8 0
+300

@@ -402,7 +402,7 @@ class Nil : public Object {
 public:
 	virtual bool is_nil() const override { return true; }
 	virtual ObjectPtr call(NodePtr arg) override {
-		return std::make_unique<True>();
+		return std::make_shared<True>();
 	}
 	virtual void dump(std::ostream& os) const override { os << "nil"; }
 };
