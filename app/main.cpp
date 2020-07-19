@@ -1,39 +1,62 @@
 #include <iostream>
 #include <regex>
 #include <string>
-#include "httplib.h"
+//#include "httplib.h"
+#include "galaxy.hpp"
+
+using namespace std;
+
+class Solver {
+private:
+
+public:
+	void solver() {
+		return;
+	}
+
+};
 
 int main(int argc, char* argv[])
 {
-	const std::string serverUrl(argv[1]);
-	const std::string playerKey(argv[2]);
+	if (argc < 3) {
+		std::cerr << "Usage: " << argv[0] << " endpoint player_key" << std::endl;
+		return 0;
+	}
 
-	std::cout << "ServerUrl: " << serverUrl << "; PlayerKey: " << playerKey << std::endl;
+	galaxy::global_initialize();
 	
-	const std::regex urlRegexp("http://(.+):(\\d+)");
-	std::smatch urlMatches;
-	if (!std::regex_search(serverUrl, urlMatches, urlRegexp) || urlMatches.size() != 3) {
-		std::cout << "Unexpected server response:\nBad server URL" << std::endl;
-		return 1;
-	}
-	const std::string serverName = urlMatches[1];
-	const int serverPort = std::stoi(urlMatches[2]);
-	httplib::Client client(serverName, serverPort);
-	const std::shared_ptr<httplib::Response> serverResponse = 
-		client.Post(serverUrl.c_str(), playerKey.c_str(), "text/plain");
+	/*
+	https://icfpc2020-api.testkontur.ru/aliens/send
+	b0a3d915b8d742a39897ab4dab931721
+	*/
 
-	if (!serverResponse) {
-		std::cout << "Unexpected server response:\nNo response from server" << std::endl;
-		return 1;
+	const std::string endpoint = argv[1];
+	const long player_key = atol(argv[2]);
+
+	galaxy::GalaxyContext ctx(endpoint, player_key);
+
+	// Response
+	galaxy::GameResponse res;
+
+	// Join
+	res = ctx.join();
+
+	// Start
+	galaxy::ShipParams ship_params;
+	ship_params.x0 = 0;
+	ship_params.x1 = 0;
+	ship_params.x2 = 0;
+	ship_params.x3 = 1;
+	res = ctx.start(ship_params);
+
+	// Command loop
+	while (res.stage == galaxy::GameStage::RUNNING) {
+		res.dump(std::cerr);
+		galaxy::CommandListBuilder cmds;
+		res = ctx.command(cmds);
 	}
+
+	galaxy::global_finalize();
 	
-	if (serverResponse->status != 200) {
-		std::cout << "Unexpected server response:\nHTTP code: " << serverResponse->status
-		          << "\nResponse body: " << serverResponse->body << std::endl;
-		return 2;
-	}
-
-	std::cout << "Server response: " << serverResponse->body << std::endl;
 	return 0;
 }
-

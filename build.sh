@@ -2,4 +2,4 @@
 
 cd app
 mkdir ../build
-g++ -std=c++11 -o ../build/main main.cpp
+g++ -I./include -lcurl -O2 -Wall -I. -o ../build/main main.cpp
