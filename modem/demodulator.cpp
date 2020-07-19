@@ -11,12 +11,12 @@ enum class Kind {
 
 struct Element {
 	Kind kind;
-	int value;
+	long long int value;
 	std::unique_ptr<Element> x0;
 	std::unique_ptr<Element> x1;
 
 	Element() : kind(Kind::NIL) { }
-	Element(int x) : kind(Kind::NUMBER), value(x) { }
+	Element(long long int x) : kind(Kind::NUMBER), value(x) { }
 };
 
 
@@ -52,9 +52,11 @@ Element decode(const char *&p){
 			++p;
 		}
 		++p;
-		int value = 0;
+		long long int value = 0;
+        fprintf(stderr, "depth = %d\n", depth);
 		for(int i = 0; i < depth; ++i){
 			value = (value << 1) | (*p - '0');
+            fprintf(stderr, "value = %lld\n", value);
 			++p;
 		}
 		return Element(value * sign);
