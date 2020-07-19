@@ -9,7 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.19.2"
+    "axios": "^0.19.2",
+    "big-integer": "^1.6.48",
+    "sync-request": "^6.1.0"
   },
   "eslintConfig": {
     "root": true,
@@ -17,7 +19,9 @@
       "node": true,
       "es6": true
     },
-    "extends": [ "eslint:recommended" ],
+    "extends": [
+      "eslint:recommended"
+    ],
     "parserOptions": {
       "parser": "babel-eslint",
       "ecmaVersion": 2017
