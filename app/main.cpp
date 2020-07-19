@@ -86,6 +86,12 @@ public:
         return makeCons("2", makeCons(playerKey, "nil"));
     }
 
+    // START [WIP]
+    std::string makeStartRequest(const std::string& playerKey,
+                                 const std::string& gameResponse) {
+        return makeCons("3", gameResponse);
+    }
+
     // SEND
     std::string send(const std::string& request) const {
         const auto response = client->Post(alienSendUrl.c_str(), request, "text/plain");
@@ -95,6 +101,9 @@ public:
 };
 
 class Solver : RequestHandler {
+private:
+    std::string response;
+    
 public:
     Solver(const std::string &serverUrl,
            const std::string &playerKey)
@@ -104,9 +113,14 @@ public:
         // join
         std::string joinCmd = makeJoinRequest(playerKey);
         std::cout << "join request = " << joinCmd << std::endl;
-        send(joinCmd);
-
+        response = send(joinCmd);
+        std::cout << "join response = " << response << std::endl;
+        
         // start
+        std::string startCmd = makeStartRequest(playerKey, response);
+        std::cout << "start request = " << startCmd << std::endl;
+        response = send(startCmd);
+        std::cout << "start response = " << response << std::endl;
     }
 };
 
