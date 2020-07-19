@@ -9,12 +9,14 @@
 class RequestHandler {
 private:
     httplib::Client* client;
+    std::string alienSendUrl;
     
 public:
-    int_least8_t returnedStatus;
+    int8_t returnedStatus;
     RequestHandler() = default;
     RequestHandler(const std::string &serverUrl,
-                   const std::string &playerKey) {
+                   const std::string &playerKey)
+        : alienSendUrl(serverUrl + "/aliens/send") {
         std::cout << "ServerUrl: " << serverUrl << "; PlayerKey: " << playerKey << std::endl;
 	
         const std::regex urlRegexp("http://(.+):(\\d+)");
@@ -85,9 +87,10 @@ public:
     }
 
     // SEND
-    std::string send(const std::string& serverUrl,
-                     const std::string& request) const {
-        
+    std::string send(const std::string& request) const {
+        const auto response = client->Post(alienSendUrl.c_str(), request, "text/plain");
+        std::cout << "send: response status " << response->status << std::endl;
+        return response->body;
     }
 };
 
@@ -98,7 +101,12 @@ public:
         : RequestHandler(serverUrl, playerKey) {
         std::cout << "returned status = " << returnedStatus << std::endl;
 
-        
+        // join
+        std::string joinCmd = makeJoinRequest(playerKey);
+        std::cout << "join request = " << joinCmd << std::endl;
+        send(joinCmd);
+
+        // start
     }
 };
 
