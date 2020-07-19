@@ -20,15 +20,16 @@ int main(int argc, char *argv[]){
 	res = ctx.join();
 
 	// Start
-	galaxy::StartParams start_params;
-	start_params.values[0] = 0;
-	start_params.values[1] = 0;
-	start_params.values[2] = 0;
-	start_params.values[3] = 1;
-	res = ctx.start(start_params);
+	galaxy::ShipParams ship_params;
+	ship_params.x0 = 0;
+	ship_params.x1 = 0;
+	ship_params.x2 = 0;
+	ship_params.x3 = 1;
+	res = ctx.start(ship_params);
 
 	// Command loop
 	while(res.stage == galaxy::GameStage::RUNNING){
+		res.dump(std::cerr);
 		galaxy::CommandListBuilder cmds;
 		res = ctx.command(cmds);
 	}
