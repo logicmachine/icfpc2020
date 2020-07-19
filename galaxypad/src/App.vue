@@ -67,13 +67,14 @@ export default {
       this.ctx.fillStyle = 'black'
       this.ctx.fillRect(0, 0, canvasSize, canvasSize)
       const offset = Math.round(canvasSize / 2)
-      interpreter.screens.forEach((pic, index) => {
+      for(let index = interpreter.screens.length - 1; index >= 0; --index){
+        const pic = interpreter.screens[index]
         this.ctx.fillStyle = palette[index % palette.length]
         pic.coords.forEach((c) => {
           const x = c[0] * canvasScale + offset, y = c[1] * canvasScale + offset
           this.ctx.fillRect(x + 1, y + 1, canvasScale, canvasScale)
         })
-      })
+      }
     },
 
     async clickScreen(e){
