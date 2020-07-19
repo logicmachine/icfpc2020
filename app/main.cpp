@@ -1,39 +1,53 @@
-#include <iostream>
-#include <regex>
-#include <string>
-#include "httplib.h"
+#include "galaxy.hpp"
 
-int main(int argc, char* argv[])
-{
-	const std::string serverUrl(argv[1]);
-	const std::string playerKey(argv[2]);
-
-	std::cout << "ServerUrl: " << serverUrl << "; PlayerKey: " << playerKey << std::endl;
-	
-	const std::regex urlRegexp("http://(.+):(\\d+)");
-	std::smatch urlMatches;
-	if (!std::regex_search(serverUrl, urlMatches, urlRegexp) || urlMatches.size() != 3) {
-		std::cout << "Unexpected server response:\nBad server URL" << std::endl;
-		return 1;
-	}
-	const std::string serverName = urlMatches[1];
-	const int serverPort = std::stoi(urlMatches[2]);
-	httplib::Client client(serverName, serverPort);
-	const std::shared_ptr<httplib::Response> serverResponse = 
-		client.Post(serverUrl.c_str(), playerKey.c_str(), "text/plain");
-
-	if (!serverResponse) {
-		std::cout << "Unexpected server response:\nNo response from server" << std::endl;
-		return 1;
-	}
-	
-	if (serverResponse->status != 200) {
-		std::cout << "Unexpected server response:\nHTTP code: " << serverResponse->status
-		          << "\nResponse body: " << serverResponse->body << std::endl;
-		return 2;
+int main(int argc, char *argv[]){
+	if(argc < 3){
+		std::cerr << "Usage: " << argv[0] << " endpoint player_key" << std::endl;
+		return 0;
 	}
 
-	std::cout << "Server response: " << serverResponse->body << std::endl;
+	galaxy::global_initialize();
+
+	const std::string endpoint = argv[1];
+	const long player_key = atol(argv[2]);
+
+	galaxy::GalaxyContext ctx(endpoint, player_key);
+
+	// Response
+	galaxy::GameResponse res;
+
+	// Join
+	res = ctx.join();
+	const auto self_role = res.static_info.self_role;
+
+	// Start
+	galaxy::ShipParams ship_params;
+	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 : 446);  // TODO
+	ship_params.x1 = 0;
+	ship_params.x2 = 0;
+	ship_params.x3 = 1;
+	res = ctx.start(ship_params);
+
+	// Command loop
+	const long interval = 4;
+	long counter = 0;
+	while(res.stage == galaxy::GameStage::RUNNING){
+		res.dump(std::cerr);
+		galaxy::CommandListBuilder cmds;
+		if((counter + 1) % interval != 0){
+			for(const auto& sac : res.state.ships){
+				const auto& ship = sac.ship;
+				if(ship.role != res.static_info.self_role){ continue; }
+				if(ship.params.x0 <= 100){ continue; }  // TODO
+				const long ddx = ship.pos.x >= 0 ? -1 : 1;
+				const long ddy = ship.pos.y >= 0 ? -1 : 1;
+				cmds.accel(ship.id, galaxy::Vec(ddx, ddy));
+			}
+		}
+		res = ctx.command(cmds);
+		++counter;
+	}
+
+	galaxy::global_finalize();
 	return 0;
 }
-
