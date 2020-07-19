@@ -132,16 +132,18 @@ void attacker(
 				const auto accel = compute_accel(ship.pos, ship.vel, bound_radius);
 				if(accel.x != 0 || accel.y != 0){ cmds.accel(ship.id, accel); }
 				// Shooting
-				for(const auto& target_sac : res.state.ships){
-					const auto& target = target_sac.ship;
-					if(target.role != res.static_info.self_role){
-						const ship_state_t cur_state(target.pos, target.vel);
-						const auto it = predictions.find(cur_state);
-						if(it != predictions.end()){
-							const auto key = it->first;
-							const auto p = key.first, v = key.second;
-							cmds.shoot(ship.id, it->second, ship.params.x1);
-							break;
+				if(ship.x5 == 0){  // TODO
+					for(const auto& target_sac : res.state.ships){
+						const auto& target = target_sac.ship;
+						if(target.role != res.static_info.self_role){
+							const ship_state_t cur_state(target.pos, target.vel);
+							const auto it = predictions.find(cur_state);
+							if(it != predictions.end()){
+								const auto key = it->first;
+								const auto p = key.first, v = key.second;
+								cmds.shoot(ship.id, it->second, ship.params.x1);
+								break;
+							}
 						}
 					}
 				}

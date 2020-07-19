@@ -467,6 +467,9 @@ struct ShipState {
 	Vec        pos;
 	Vec        vel;
 	ShipParams params;
+	long       x5;
+	long       x6;
+	long       x7;
 
 	ShipState()
 		: role(PlayerRole::ATTACKER)
@@ -474,6 +477,9 @@ struct ShipState {
 		, pos()
 		, vel()
 		, params()
+		, x5(0)
+		, x6(0)
+		, x7(0)
 	{ }
 
 	static ShipState decode(const Element& e){
@@ -485,6 +491,9 @@ struct ShipState {
 		state.pos    = e_list[2].as_vector();
 		state.vel    = e_list[3].as_vector();
 		state.params = ShipParams::decode(e_list[4]);
+		state.x5     = e_list[5].as_number();
+		state.x6     = e_list[6].as_number();
+		state.x7     = e_list[7].as_number();
 		return state;
 	}
 
@@ -495,6 +504,9 @@ struct ShipState {
 		os << prefix << "pos: (" << pos.x << ", " << pos.y << ")" << std::endl;
 		os << prefix << "vel: (" << vel.x << ", " << vel.y << ")" << std::endl;
 		os << prefix << "params:" << std::endl;
+		os << prefix << "x5: " << x5 << std::endl;
+		os << prefix << "x6: " << x6 << std::endl;
+		os << prefix << "x7: " << x7 << std::endl;
 		params.dump(os, depth + 1);
 	}
 };
