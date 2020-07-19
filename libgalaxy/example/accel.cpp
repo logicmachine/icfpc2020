@@ -55,9 +55,9 @@ int main(int argc, char *argv[]){
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 : 446);  // TODO
+	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 : 446) - 120;  // TODO
 	ship_params.x1 = 0;
-	ship_params.x2 = 0;
+	ship_params.x2 = 10;
 	ship_params.x3 = 1;
 	res = ctx.start(ship_params);
 
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]){
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
 			if(ship.role != res.static_info.self_role){ continue; }
-			if(ship.params.x0 <= 128){ continue; }  // TODO
+			if(ship.params.x0 <= 50){ continue; }  // TODO
 			const Vec p = ship.pos, d = ship.vel;
 			const Vec dd(p.x >= 0 ? -1 : 1, p.y >= 0 ? -1 : 1);
 			const auto next = simulate(p, Vec(d.x - dd.x, d.y - dd.y));
