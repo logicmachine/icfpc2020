@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <array>
 #include <string>
 #include <vector>
 #include <memory>
@@ -301,7 +302,23 @@ public:
 //----------------------------------------------------------------------------
 // Structures
 //----------------------------------------------------------------------------
+struct RoomInfo {
+	long attacker_key;
+	long defender_key;
 
+	RoomInfo()
+		: attacker_key(0)
+		, defender_key(0)
+	{ }
+};
+
+struct StartParams {
+	std::array<long, 4> values;
+
+	StartParams()
+		: values({ 0, 0, 0, 0 })
+	{ }
+};
 
 
 //----------------------------------------------------------------------------
@@ -311,18 +328,89 @@ class GalaxyContext {
 
 private:
 	const long m_player_key;
-	const std::string m_endpoint;
+
+	RemoteQueryEngine m_remote;
+
+	Element construct_create_room_query() const {
+		std::vector<Element> root;
+		root.push_back(Element(1));
+		root.push_back(Element(0));
+		return Element(std::move(root));
+	}
+
+	Element construct_join_query() const {
+		std::vector<Element> root;
+		root.push_back(Element(2));
+		root.push_back(Element(m_player_key));
+		root.push_back(Element());
+		return Element(std::move(root));
+	}
+
+	Element construct_start_query(const StartParams& params) const {
+		std::vector<Element> param_list;
+		for(const auto& x : params.values){ param_list.push_back(Element(x)); }
+		std::vector<Element> root;
+		root.push_back(Element(3));
+		root.push_back(Element(m_player_key));
+		root.push_back(Element(std::move(param_list)));
+		return Element(std::move(root));
+	}
 
 public:
 	GalaxyContext()
 		: m_player_key(0)
-		, m_endpoint()
+		, m_remote()
 	{ }
 
-	GalaxyContext(long player_key, std::string endpoint)
+	GalaxyContext(std::string endpoint, long player_key)
 		: m_player_key(player_key)
-		, m_endpoint(std::move(endpoint))
+		, m_remote(std::move(endpoint))
 	{ }
+
+	RoomInfo create_room(){
+		const auto q = construct_create_room_query();
+#ifdef GALAXY_VERBOSE
+		std::cerr << "<< " << serialize(q) << std::endl;
+#endif
+		const auto res = m_remote(modulate(q));
+		const auto dem = demodulate(res);
+#ifdef GALAXY_VERBOSE
+		std::cerr << ">> " << serialize(dem) << std::endl;
+#endif
+		// TODO which is an attacker?
+		RoomInfo ri;
+		for(const auto& e : dem.as_list()[1].as_list()){
+			const auto vs = e.as_list();
+			if(vs[0].as_number() == 0){
+				ri.attacker_key = vs[1].as_number();
+			}else{
+				ri.defender_key = vs[1].as_number();
+			}
+		}
+		return ri;
+	}
+
+	void join(){
+		const auto q = construct_join_query();
+#ifdef GALAXY_VERBOSE
+		std::cerr << "<< " << serialize(q) << std::endl;
+#endif
+		const auto res = m_remote(modulate(q));
+#ifdef GALAXY_VERBOSE
+		std::cerr << ">> " << serialize(demodulate(res)) << std::endl;
+#endif
+	}
+
+	void start(const StartParams& params){
+		const auto q = construct_start_query(params);
+#ifdef GALAXY_VERBOSE
+		std::cerr << "<< "  << serialize(q) << std::endl;
+#endif
+		const auto res = m_remote(modulate(q));
+#ifdef GALAXY_VERBOSE
+		std::cerr << ">> " << serialize(demodulate(res)) << std::endl;
+#endif
+	}
 
 };
 
