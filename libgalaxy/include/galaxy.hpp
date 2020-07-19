@@ -421,10 +421,14 @@ public:
 struct StaticGameInfo {
 	long       time_limit;
 	PlayerRole self_role;
+	long 			 orbit_size;
+	long 			 field_size;
 
 	StaticGameInfo()
 		: time_limit(0)
 		, self_role(PlayerRole::ATTACKER)
+		, orbit_size(0)
+		, field_size(0)
 	{ }
 
 	static StaticGameInfo decode(const Element& e){
@@ -433,6 +437,9 @@ struct StaticGameInfo {
 		StaticGameInfo info;
 		info.time_limit = e_list[0].as_number();
 		info.self_role  = static_cast<PlayerRole>(e_list[1].as_number());
+		
+		info.orbit_size  = e_list[3].as_list()[0].as_number();
+		info.field_size  = e_list[3].as_list()[1].as_number();
 		return info;
 	}
 
@@ -440,6 +447,8 @@ struct StaticGameInfo {
 		const std::string prefix(depth * 2, ' ');
 		os << prefix << "time_limit: " << time_limit << std::endl;
 		os << prefix << "self_role: " << self_role << std::endl;
+		os << prefix << "orbit_size: " << orbit_size << std::endl;
+		os << prefix << "field_size: " << field_size << std::endl;
 	}
 };
 
