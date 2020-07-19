@@ -90,7 +90,7 @@ public:
     // START [WIP]
     std::string makeStartRequest(const std::string& playerKey,
                                  const std::string& gameResponse) {
-        return makeCons("3", gameResponse);
+        return makeCons("3", makeCons(playerKey, makeCons(makeCons("1", makeCons("0", makeCons("0", makeCons("1", "nil")))), "nil")));
     }
 
     // SEND
@@ -111,6 +111,13 @@ public:
         : RequestHandler(serverUrl, playerKey) {
         std::cout << "returned status = " << returnedStatus << std::endl;
 
+        if(false) {
+            std::string dummy = "hoge";
+            std::string startCmd = makeStartRequest(playerKey, dummy);
+            std::cout << "[debug (dummy)] start request = " << startCmd << std::endl;
+            std::cout << "[debug (dummy)] modulated start request = " << modulate(startCmd) << std::endl;            
+        }
+        
         // join
         std::string joinCmd = makeJoinRequest(playerKey);
         std::cout << "join request = " << joinCmd << std::endl;
@@ -121,7 +128,8 @@ public:
         // start
         std::string startCmd = makeStartRequest(playerKey, response);
         std::cout << "start request = " << startCmd << std::endl;
-        response = send(startCmd);
+        std::cout << "modulated start request = " << modulate(startCmd) << std::endl;
+        response = send(modulate(startCmd));
         std::cout << "start response = " << response << std::endl;
     }
 };
