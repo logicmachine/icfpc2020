@@ -189,14 +189,59 @@ const DemDecl = (x0) => {
     return (recur(0)).value
 }
 
+// Debugging utilities
+const isListObject = (x) => {
+    if(x instanceof BigInt){ return false }
+    if(x instanceof ModulatedValue){ return false }
+    if(x instanceof Picture){ return false }
+    if(x === NilDecl){ return true }
+    return isListObject(CdrDecl(asNode(x)))
+}
+
+const stringifyObject = (x) => {
+    if(x instanceof BigInt){
+        return x.toString()
+    }else if(x instanceof ModulatedValue){
+        return '[' + x.value + ']'
+    }else if(x instanceof Picture){
+        return 'Picture'
+    }else if(x === NilDecl){
+        return 'nil'
+    }else if(x === TrueDecl){
+        return 't'
+    }else if(x === FalseDecl){
+        return 'f'
+    }else if(isListObject(x)){
+        let cur = x, result = '(', isFirst = true
+        while(cur !== NilDecl){
+            if(!isFirst){ result += ' ,' }
+            isFirst = false
+            const node  = asNode(cur)
+            const first = CarDecl(node)
+            const tail  = CdrDecl(node)
+            result += ' ' + stringifyObject(first)
+            cur = tail
+        }
+        return result + ' )'
+    }else{
+        const node  = asNode(x)
+        const first = CarDecl(node)
+        const tail  = CdrDecl(node)
+        return 'ap ap cons ' + stringifyObject(first) + ' ' + stringifyObject(tail)
+    }
+}
+
 // #15: Send
 const SendDecl = (x0) => {
     const data = x0.eval()
     const query = (ModDecl(asNode(data))).value
     console.log('Send:', query)
+    console.log(stringifyObject(data))
     const response = request('POST', CLIENT_ENDPOINT, { body: query }).getBody('utf8')
     console.log('Recv:', response)
-    return DemDecl(asNode(new ModulatedValue(response)))
+    const y0 = DemDecl(asNode(new ModulatedValue(response)))
+    console.log(stringifyObject(y0))
+    return y0
 }
 
 // #32: Draw
@@ -256,48 +301,6 @@ const InteractDecl = (protocol, interpreter) => { return (state) => { return (ve
         return r1(asNode(r2))
     }
 }}}
-
-// Debugging utilities
-const isListObject = (x) => {
-    if(x instanceof BigInt){ return false }
-    if(x instanceof ModulatedValue){ return false }
-    if(x instanceof Picture){ return false }
-    if(x === NilDecl){ return true }
-    return isListObject(CdrDecl(asNode(x)))
-}
-
-const stringifyObject = (x) => {
-    if(x instanceof BigInt){
-        return x.toString()
-    }else if(x instanceof ModulatedValue){
-        return '[' + x.value + ']'
-    }else if(x instanceof Picture){
-        return 'Picture'
-    }else if(x === NilDecl){
-        return 'nil'
-    }else if(x === TrueDecl){
-        return 't'
-    }else if(x === FalseDecl){
-        return 'f'
-    }else if(isListObject(x)){
-        let cur = x, result = '(', isFirst = true
-        while(cur !== NilDecl){
-            if(!isFirst){ result += ' ,' }
-            isFirst = false
-            const node  = asNode(cur)
-            const first = CarDecl(node)
-            const tail  = CdrDecl(node)
-            result += ' ' + stringifyObject(first)
-            cur = tail
-        }
-        return result + ' )'
-    }else{
-        const node  = asNode(x)
-        const first = CarDecl(node)
-        const tail  = CdrDecl(node)
-        return 'ap ap cons ' + stringifyObject(first) + ' ' + stringifyObject(tail)
-    }
-}
 
 
 //----------------------------------------------------------------------------
