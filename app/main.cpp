@@ -83,7 +83,7 @@ public:
 
     // JOIN
     std::string makeJoinRequest(const std::string& playerKey) const {
-        return makeCons("2", makeCons(playerKey, "nil"));
+        return makeCons("2", makeCons(playerKey, makeCons("nil", "nil")));
     }
 
     // START [WIP]
