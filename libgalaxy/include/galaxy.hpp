@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include <cassert>
 
@@ -252,6 +253,49 @@ static Element demodulate(const std::string& s){
 	std::istringstream iss(s);
 	return detail::demodulate_recur(iss);
 }
+
+
+//----------------------------------------------------------------------------
+// Networking
+//----------------------------------------------------------------------------
+class RemoteQueryEngine {
+
+private:
+	std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_curl;
+	std::string m_endpoint;
+
+	static size_t callback(char *buffer, size_t size, size_t nmemb, void *userdata){
+		std::vector<char> *v = reinterpret_cast<std::vector<char>*>(userdata);
+		v->reserve(v->size() + size * nmemb + 1);
+		for(size_t i = 0; i < size * nmemb; ++i){ v->push_back(buffer[i]); }
+		return size * nmemb;
+	}
+
+public:
+	RemoteQueryEngine()
+		: m_curl(nullptr, curl_easy_cleanup)
+		, m_endpoint()
+	{ }
+
+	explicit RemoteQueryEngine(std::string endpoint)
+		: m_curl(curl_easy_init(), &curl_easy_cleanup)
+		, m_endpoint(std::move(endpoint))
+	{
+		if(!m_curl){ throw std::runtime_error("failed to initialize libcurl"); }
+		curl_easy_setopt(m_curl.get(), CURLOPT_URL, m_endpoint.c_str());
+		curl_easy_setopt(m_curl.get(), CURLOPT_WRITEFUNCTION, callback);
+	}
+
+	std::string operator()(const std::string& body){
+		std::vector<char> received_raw;
+		curl_easy_setopt(m_curl.get(), CURLOPT_POSTFIELDS, body.c_str());
+		curl_easy_setopt(m_curl.get(), CURLOPT_WRITEDATA, &received_raw);
+		curl_easy_perform(m_curl.get());
+		received_raw.push_back('\0');
+		return std::string(received_raw.data());
+	}
+
+};
 
 
 //----------------------------------------------------------------------------
