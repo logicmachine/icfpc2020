@@ -391,6 +391,30 @@ public:
 		return Element(m_commands);
 	}
 
+	void accel(long ship_id, const Vec& v){
+		std::vector<Element> root;
+		root.emplace_back(0);
+		root.emplace_back(ship_id);
+		root.emplace_back(v);
+		m_commands.push_back(std::move(root));
+	}
+
+	void detonate(long ship_id){
+		std::vector<Element> root;
+		root.emplace_back(1);
+		root.emplace_back(ship_id);
+		m_commands.push_back(std::move(root));
+	}
+
+	void shoot(long ship_id, const Vec& target){
+		std::vector<Element> root;
+		root.emplace_back(2);
+		root.emplace_back(ship_id);
+		root.emplace_back(target);
+		root.emplace_back(0);
+		m_commands.push_back(std::move(root));
+	}
+
 };
 
 
