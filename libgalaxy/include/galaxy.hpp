@@ -47,6 +47,12 @@ struct Vec {
 	long x, y;
 	Vec() : x(0), y(0) { }
 	Vec(long x, long y) : x(x), y(y) { }
+	bool operator==(const Vec& v) const { return x == v.x && y == v.y; }
+	bool operator!=(const Vec& v) const { return x != v.x || y != v.y; }
+	bool operator< (const Vec& v) const { return (x == v.x) ? (y < v.y) : (x < v.x); }
+	bool operator> (const Vec& v) const { return v < *this; }
+	bool operator<=(const Vec& v) const { return !(*this > v); }
+	bool operator>=(const Vec& v) const { return !(*this < v); }
 };
 
 
@@ -406,12 +412,12 @@ public:
 		m_commands.push_back(std::move(root));
 	}
 
-	void shoot(long ship_id, const Vec& target){
+	void shoot(long ship_id, const Vec& target, long power){
 		std::vector<Element> root;
 		root.emplace_back(2);
 		root.emplace_back(ship_id);
 		root.emplace_back(target);
-		root.emplace_back(0);
+		root.emplace_back(power);
 		m_commands.push_back(std::move(root));
 	}
 
@@ -421,12 +427,14 @@ public:
 struct StaticGameInfo {
 	long       time_limit;
 	PlayerRole self_role;
+	long       parameter_capacity;
 	long       galaxy_radius;
 	long       universe_radius;
 
 	StaticGameInfo()
 		: time_limit(0)
 		, self_role(PlayerRole::ATTACKER)
+		, parameter_capacity(0)
 		, galaxy_radius(0)
 		, universe_radius(0)
 	{ }
@@ -435,10 +443,11 @@ struct StaticGameInfo {
 		if(e.is_nil()){ return StaticGameInfo(); }
 		const auto& e_list = e.as_list();
 		StaticGameInfo info;
-		info.time_limit      = e_list[0].as_number();
-		info.self_role       = static_cast<PlayerRole>(e_list[1].as_number());
-		info.galaxy_radius   = e_list[3].as_list()[0].as_number();
-		info.universe_radius = e_list[3].as_list()[1].as_number();
+		info.time_limit         = e_list[0].as_number();
+		info.self_role          = static_cast<PlayerRole>(e_list[1].as_number());
+		info.parameter_capacity = e_list[2].as_list()[0].as_number();
+		info.galaxy_radius      = e_list[3].as_list()[0].as_number();
+		info.universe_radius    = e_list[3].as_list()[1].as_number();
 		return info;
 	}
 
@@ -446,6 +455,7 @@ struct StaticGameInfo {
 		const std::string prefix(depth * 2, ' ');
 		os << prefix << "time_limit: " << time_limit << std::endl;
 		os << prefix << "self_role: " << self_role << std::endl;
+		os << prefix << "parameter_capacity: " << parameter_capacity << std::endl;
 		os << prefix << "galaxy_radius: " << galaxy_radius << std::endl;
 		os << prefix << "universe_radius: " << universe_radius << std::endl;
 	}
