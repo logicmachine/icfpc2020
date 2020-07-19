@@ -62,7 +62,9 @@ export default {
       if(this.running){ return }
       interpreter.clearScreens()
       this.running = true
-      this.state = await interpreter.interact('galaxy', this.state, this.vector)
+      for(let line of this.vector.split('\n')){
+        this.state = await interpreter.interact('galaxy', this.state, line)
+      }
       this.running = false
       this.ctx.fillStyle = 'black'
       this.ctx.fillRect(0, 0, canvasSize, canvasSize)

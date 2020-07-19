@@ -307,11 +307,28 @@ enum class PlayerRole {
 	DEFENDER = 1
 };
 
+std::ostream& operator<<(std::ostream& os, PlayerRole x){
+	switch(x){
+	case PlayerRole::ATTACKER: return os << "Attacker";
+	case PlayerRole::DEFENDER: return os << "Defender";
+	default: return os << "(unknown)";
+	}
+}
+
 enum class GameStage {
 	NOT_STARTED = 0,
 	RUNNING     = 1,
 	COMPLETED   = 2
 };
+
+std::ostream& operator<<(std::ostream& os, GameStage x){
+	switch(x){
+	case GameStage::NOT_STARTED: return os << "NotStarted";
+	case GameStage::RUNNING:     return os << "Running";
+	case GameStage::COMPLETED:   return os << "Completed";
+	default: return os << "(unknown)";
+	}
+}
 
 
 struct RoomInfo {
@@ -325,12 +342,38 @@ struct RoomInfo {
 };
 
 
-struct StartParams {
-	std::array<long, 4> values;
+struct ShipParams {
+	long x0, x1, x2, x3;
 
-	StartParams()
-		: values({ 0, 0, 0, 0 })
-	{ }
+	ShipParams() : x0(0), x1(0), x2(0), x3(0) { }
+
+	Element encode() const {
+		std::vector<Element> root;
+		root.emplace_back(x0);
+		root.emplace_back(x1);
+		root.emplace_back(x2);
+		root.emplace_back(x3);
+		return Element(std::move(root));
+	}
+
+	static ShipParams decode(const Element& e){
+		if(e.is_nil()){ return ShipParams(); }
+		const auto& e_list = e.as_list();
+		ShipParams params;
+		params.x0 = e_list[0].as_number();
+		params.x1 = e_list[1].as_number();
+		params.x2 = e_list[2].as_number();
+		params.x3 = e_list[3].as_number();
+		return params;
+	}
+
+	void dump(std::ostream& os, size_t depth = 0) const {
+		const std::string prefix(depth * 2, ' ');
+		os << prefix << "x0: " << x0 << std::endl;
+		os << prefix << "x1: " << x1 << std::endl;
+		os << prefix << "x2: " << x2 << std::endl;
+		os << prefix << "x3: " << x3 << std::endl;
+	}
 };
 
 
@@ -346,6 +389,30 @@ public:
 
 	Element build() const {
 		return Element(m_commands);
+	}
+
+	void accel(long ship_id, const Vec& v){
+		std::vector<Element> root;
+		root.emplace_back(0);
+		root.emplace_back(ship_id);
+		root.emplace_back(v);
+		m_commands.push_back(std::move(root));
+	}
+
+	void detonate(long ship_id){
+		std::vector<Element> root;
+		root.emplace_back(1);
+		root.emplace_back(ship_id);
+		m_commands.push_back(std::move(root));
+	}
+
+	void shoot(long ship_id, const Vec& target){
+		std::vector<Element> root;
+		root.emplace_back(2);
+		root.emplace_back(ship_id);
+		root.emplace_back(target);
+		root.emplace_back(0);
+		m_commands.push_back(std::move(root));
 	}
 
 };
@@ -368,13 +435,82 @@ struct StaticGameInfo {
 		info.self_role  = static_cast<PlayerRole>(e_list[1].as_number());
 		return info;
 	}
+
+	void dump(std::ostream& os, size_t depth = 0) const {
+		const std::string prefix(depth * 2, ' ');
+		os << prefix << "time_limit: " << time_limit << std::endl;
+		os << prefix << "self_role: " << self_role << std::endl;
+	}
+};
+
+struct ShipState {
+	PlayerRole role;
+	long       id;
+	Vec        pos;
+	Vec        vel;
+	ShipParams params;
+
+	ShipState()
+		: role(PlayerRole::ATTACKER)
+		, id(0)
+		, pos()
+		, vel()
+		, params()
+	{ }
+
+	static ShipState decode(const Element& e){
+		if(e.is_nil()){ return ShipState(); }
+		const auto& e_list = e.as_list();
+		ShipState state;
+		state.role   = static_cast<PlayerRole>(e_list[0].as_number());
+		state.id     = e_list[1].as_number();
+		state.pos    = e_list[2].as_vector();
+		state.vel    = e_list[3].as_vector();
+		state.params = ShipParams::decode(e_list[4]);
+		return state;
+	}
+
+	void dump(std::ostream& os, size_t depth = 0) const {
+		const std::string prefix(depth * 2, ' ');
+		os << prefix << "role: " << role << std::endl;
+		os << prefix << "id: " << id << std::endl;
+		os << prefix << "pos: (" << pos.x << ", " << pos.y << ")" << std::endl;
+		os << prefix << "vel: (" << vel.x << ", " << vel.y << ")" << std::endl;
+		os << prefix << "params:" << std::endl;
+		params.dump(os, depth + 1);
+	}
+};
+
+struct ShipAndCommands {
+	ShipState ship;
+	// TODO applied_commands;
+
+	ShipAndCommands()
+		: ship()
+	{ }
+
+	static ShipAndCommands decode(const Element& e){
+		if(e.is_nil()){ return ShipAndCommands(); }
+		const auto& e_list = e.as_list();
+		ShipAndCommands sac;
+		sac.ship = ShipState::decode(e_list[0]);
+		return sac;
+	}
+
+	void dump(std::ostream& os, size_t depth = 0) const {
+		const std::string prefix(depth * 2, ' ');
+		os << prefix << "ship:" << std::endl;
+		ship.dump(os, depth + 1);
+	}
 };
 
 struct GameState {
-	long elapsed;
+	long                         elapsed;
+	std::vector<ShipAndCommands> ships;
 
 	GameState()
 		: elapsed(0)
+		, ships()
 	{ }
 
 	static GameState decode(const Element& e){
@@ -382,7 +518,20 @@ struct GameState {
 		const auto& e_list = e.as_list();
 		GameState state;
 		state.elapsed = e_list[0].as_number();
+		const auto& raw_sac_list = e_list[2].as_list();
+		for(const auto& raw_sac : raw_sac_list){
+			state.ships.push_back(ShipAndCommands::decode(raw_sac));
+		}
 		return state;
+	}
+
+	void dump(std::ostream& os, size_t depth = 0) const {
+		const std::string prefix(depth * 2, ' ');
+		os << prefix << "elapsed: " << elapsed << std::endl;
+		for(size_t i = 0; i < ships.size(); ++i){
+			os << prefix << "ships[" << i << "]:" << std::endl;
+			ships[i].dump(os, depth + 1);
+		}
 	}
 };
 
@@ -406,6 +555,15 @@ struct GameResponse {
 		res.state       = GameState::decode(e_list[3]);
 		return res;
 	}
+
+	void dump(std::ostream& os, size_t depth = 0) const {
+		const std::string prefix(depth * 2, ' ');
+		os << prefix << "stage: " << stage << std::endl;
+		os << prefix << "static_info:" << std::endl;
+		static_info.dump(os, depth + 1);
+		os << prefix << "state:" << std::endl;
+		state.dump(os, depth + 1);
+	}
 };
 
 
@@ -421,34 +579,32 @@ private:
 
 	Element construct_create_room_query() const {
 		std::vector<Element> root;
-		root.push_back(Element(1));
-		root.push_back(Element(0));
+		root.emplace_back(1);
+		root.emplace_back(0);
 		return Element(std::move(root));
 	}
 
 	Element construct_join_query() const {
 		std::vector<Element> root;
-		root.push_back(Element(2));
-		root.push_back(Element(m_player_key));
-		root.push_back(Element());
+		root.emplace_back(2);
+		root.emplace_back(m_player_key);
+		root.emplace_back();
 		return Element(std::move(root));
 	}
 
-	Element construct_start_query(const StartParams& params) const {
-		std::vector<Element> param_list;
-		for(const auto& x : params.values){ param_list.push_back(Element(x)); }
+	Element construct_start_query(const ShipParams& params) const {
 		std::vector<Element> root;
-		root.push_back(Element(3));
-		root.push_back(Element(m_player_key));
-		root.push_back(Element(std::move(param_list)));
+		root.emplace_back(3);
+		root.emplace_back(m_player_key);
+		root.emplace_back(params.encode());
 		return Element(std::move(root));
 	}
 
 	Element construct_command_query(Element e) const {
 		std::vector<Element> root;
-		root.push_back(Element(4));
-		root.push_back(Element(m_player_key));
-		root.push_back(std::move(e));
+		root.emplace_back(4);
+		root.emplace_back(m_player_key);
+		root.emplace_back(std::move(e));
 		return Element(std::move(root));
 	}
 
@@ -496,7 +652,7 @@ public:
 		return GameResponse::decode(res);
 	}
 
-	GameResponse start(const StartParams& params){
+	GameResponse start(const ShipParams& params){
 		const auto q = construct_start_query(params);
 #ifdef GALAXY_VERBOSE
 		std::cerr << "<< "  << serialize(q) << std::endl;

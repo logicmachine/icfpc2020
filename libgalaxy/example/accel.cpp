@@ -18,20 +18,34 @@ int main(int argc, char *argv[]){
 
 	// Join
 	res = ctx.join();
+	const auto self_role = res.static_info.self_role;
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x0 = 0;
+	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 : 446);  // TODO
 	ship_params.x1 = 0;
 	ship_params.x2 = 0;
 	ship_params.x3 = 1;
 	res = ctx.start(ship_params);
 
 	// Command loop
+	const long interval = 4;
+	long counter = 0;
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
 		galaxy::CommandListBuilder cmds;
+		if((counter + 1) % interval != 0){
+			for(const auto& sac : res.state.ships){
+				const auto& ship = sac.ship;
+				if(ship.role != res.static_info.self_role){ continue; }
+				if(ship.params.x0 <= 100){ continue; }  // TODO
+				const long ddx = ship.pos.x >= 0 ? -1 : 1;
+				const long ddy = ship.pos.y >= 0 ? -1 : 1;
+				cmds.accel(ship.id, galaxy::Vec(ddx, ddy));
+			}
+		}
 		res = ctx.command(cmds);
+		++counter;
 	}
 
 	galaxy::global_finalize();
