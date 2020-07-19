@@ -1,4 +1,6 @@
 const request = require('sync-request')
+const BigInt = require('big-integer')
+
 const CLIENT_ENDPOINT = 'https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=b0a3d915b8d742a39897ab4dab931721'
 
 //----------------------------------------------------------------------------
@@ -65,15 +67,15 @@ const asNode = (obj) => { return new ObjectNode(obj) }
 //----------------------------------------------------------------------------
 
 // #5: Successor
-const IncDecl = (x0) => { return x0.eval() + 1 }
+const IncDecl = (x0) => { return x0.eval().add(1) }
 // #6: Predecessors
-const DecDecl = (x0) => { return x0.eval() - 1 }
+const DecDecl = (x0) => { return x0.eval().add(-1) }
 // #7: Sum
-const AddDecl = (x0) => { return (x1) => { return x0.eval() + x1.eval() } }
+const AddDecl = (x0) => { return (x1) => { return x0.eval().add(x1.eval()) } }
 // #9: Product
-const MulDecl = (x0) => { return (x1) => { return x0.eval() * x1.eval() } }
+const MulDecl = (x0) => { return (x1) => { return x0.eval().multiply(x1.eval()) } }
 // #10: Integer Division
-const DivDecl = (x0) => { return (x1) => { return Math.trunc(x0.eval() / x1.eval()) } }
+const DivDecl = (x0) => { return (x1) => { return x0.eval().divide(x1.eval()) } }
 
 // #21: True (K Combinator)
 const TrueDecl  = (x0) => { return () => { return x0.eval() } }
@@ -83,18 +85,18 @@ const FalseDecl = () => { return (x1) => { return x1.eval() } }
 // #11: Equality and Booleans
 const EqDecl = (x0) => { return (x1) => {
     const y0 = x0.eval(), y1 = x1.eval()
-    return (y0 == y1) ? TrueDecl : FalseDecl
+    return y0.equals(y1) ? TrueDecl : FalseDecl
 }}
 // #12: Strict Less Than
 const LtDecl = (x0) => { return (x1) => {
     const y0 = x0.eval(), y1 = x1.eval()
-    return (y0 < y1) ? TrueDecl : FalseDecl
+    return (y0.compare(y1) < 0) ? TrueDecl : FalseDecl
 }}
 
 // #16: Negate
-const NegDecl = (x0) => { return -(x0.eval()) }
+const NegDecl = (x0) => { return x0.eval().multiply(BigInt.minusOne) }
 // #23: PowerOfTwo
-const Pwr2Decl = (x0) => { return Math.pow(2, x0.eval()) }
+const Pwr2Decl = (x0) => { return BigInt(2).pow(x0.eval()) }
 
 // #18: S Combinator
 const SDecl = (x0) => { return (x1) => { return (x2) => {
@@ -145,12 +147,12 @@ class ModulatedValue {
 
 const ModDecl = (x0) => {
     const recur = (cur) => {
-        if(typeof(cur) === 'number'){
-            if(cur === 0){
+        if(cur instanceof BigInt){
+            if(cur.equals(0)){
                 return '010'
             }else{
-                const s = (cur > 0 ? '01' : '10')
-                const t = Math.abs(cur).toString(2)
+                const s = (cur.compare(0) > 0 ? '01' : '10')
+                const t = cur.abs().toString(2)
                 const b = (t.length + 3) & ~3
                 return s + ('1'.repeat(b / 4) + '0') + ('0'.repeat(b - t.length) + t)
             }
@@ -169,11 +171,11 @@ const DemDecl = (x0) => {
     const recur = (i) => {
         if(s[i] != s[i + 1]){
             const sign = (s[i] == '0' ? 1 : -1)
-            let b = 0, v = 0
+            let b = 0
             for(i += 2; s[i] != '0'; ++i){ b += 4 }
             ++i
-            for(let j = 0; j < b; ++j, ++i){ v = (v * 2) + (s.charCodeAt(i) - 0x30) }
-            return new ParserResult(sign * v, i)
+            const v = (b == 0 ? BigInt.zero : BigInt(s.substr(i, b), 2))
+            return new ParserResult(v.multiply(sign), i + b)
         }else if(s[i] == '0' && s[i + 1] == '0'){
             return new ParserResult(NilDecl, i + 2)
         }else{
@@ -211,7 +213,7 @@ const DrawDecl = (x0, interpreter) => {
         const first = CarDecl(node)
         const tail  = CdrDecl(node)
         const vec   = asNode(first)
-        picture.push(CarDecl(vec), CdrDecl(vec))
+        picture.push(CarDecl(vec).valueOf(), CdrDecl(vec).valueOf())
         cur = tail
     }
     interpreter.screens.push(picture)
@@ -241,7 +243,7 @@ const InteractDecl = (protocol, interpreter) => { return (state) => { return (ve
     const newState = CarDecl(sdNode)
     const dNode    = asNode(CdrDecl(sdNode))
     const data     = CarDecl(dNode)
-    if(flag === 0){
+    if(flag.equals(0)){
         const r0 = ConsDecl(asNode(newState))
         const r1 = MultipleDrawDecl(asNode(data), interpreter)
         const r2 = ConsDecl(asNode(r1))
@@ -257,7 +259,7 @@ const InteractDecl = (protocol, interpreter) => { return (state) => { return (ve
 
 // Debugging utilities
 const isListObject = (x) => {
-    if(typeof(x) === 'number'){ return false }
+    if(x instanceof BigInt){ return false }
     if(x instanceof ModulatedValue){ return false }
     if(x instanceof Picture){ return false }
     if(x === NilDecl){ return true }
@@ -265,7 +267,7 @@ const isListObject = (x) => {
 }
 
 const stringifyObject = (x) => {
-    if(typeof(x) === 'number'){
+    if(x instanceof BigInt){
         return x.toString()
     }else if(x instanceof ModulatedValue){
         return '[' + x.value + ']'
@@ -358,7 +360,7 @@ class Interpreter {
             }else if(t == ')'){
                 return new ParserResult(new ReferenceNode('nil', this.slots), i + 1)
             }else if(t.match(/^-?\d+$/g)){
-                return new ParserResult(new NumberNode(parseInt(t)), i + 1)
+                return new ParserResult(new NumberNode(BigInt(t)), i + 1)
             }else{
                 return new ParserResult(new ReferenceNode(t, this.slots), i + 1)
             }
