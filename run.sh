@@ -1,4 +1,4 @@
 #!/bin/sh
 
-cd build
-./main "$@" || echo "run error code: $?"
+cd ashiba/solver/build
+./main "$1/aliens/send" "$2" || echo "run error code: $?"
