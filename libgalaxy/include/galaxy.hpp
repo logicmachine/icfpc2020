@@ -421,18 +421,24 @@ public:
 struct StaticGameInfo {
 	long       time_limit;
 	PlayerRole self_role;
+	long       galaxy_radius;
+	long       universe_radius;
 
 	StaticGameInfo()
 		: time_limit(0)
 		, self_role(PlayerRole::ATTACKER)
+		, galaxy_radius(0)
+		, universe_radius(0)
 	{ }
 
 	static StaticGameInfo decode(const Element& e){
 		if(e.is_nil()){ return StaticGameInfo(); }
 		const auto& e_list = e.as_list();
 		StaticGameInfo info;
-		info.time_limit = e_list[0].as_number();
-		info.self_role  = static_cast<PlayerRole>(e_list[1].as_number());
+		info.time_limit      = e_list[0].as_number();
+		info.self_role       = static_cast<PlayerRole>(e_list[1].as_number());
+		info.galaxy_radius   = e_list[3].as_list()[0].as_number();
+		info.universe_radius = e_list[3].as_list()[1].as_number();
 		return info;
 	}
 
@@ -440,6 +446,8 @@ struct StaticGameInfo {
 		const std::string prefix(depth * 2, ' ');
 		os << prefix << "time_limit: " << time_limit << std::endl;
 		os << prefix << "self_role: " << self_role << std::endl;
+		os << prefix << "galaxy_radius: " << galaxy_radius << std::endl;
+		os << prefix << "universe_radius: " << universe_radius << std::endl;
 	}
 };
 
