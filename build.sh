@@ -1,5 +1,5 @@
 #!/bin/sh
 
-cd app
-mkdir ../build
-g++ -std=c++11 -o ../build/main main.cpp
+cd libgalaxy/example
+mkdir ../../build
+g++ -std=c++11 -I../include -lcurl -o ../../build/main idle.cpp
