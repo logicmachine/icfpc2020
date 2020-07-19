@@ -302,6 +302,18 @@ public:
 //----------------------------------------------------------------------------
 // Structures
 //----------------------------------------------------------------------------
+enum class PlayerRole {
+	ATTACKER = 0,
+	DEFENDER = 1
+};
+
+enum class GameStage {
+	NOT_STARTED = 0,
+	RUNNING     = 1,
+	COMPLETED   = 2
+};
+
+
 struct RoomInfo {
 	long attacker_key;
 	long defender_key;
@@ -312,12 +324,88 @@ struct RoomInfo {
 	{ }
 };
 
+
 struct StartParams {
 	std::array<long, 4> values;
 
 	StartParams()
 		: values({ 0, 0, 0, 0 })
 	{ }
+};
+
+
+class CommandListBuilder {
+
+private:
+	std::vector<Element> m_commands;
+
+public:
+	CommandListBuilder()
+		: m_commands()
+	{ }
+
+	Element build() const {
+		return Element(m_commands);
+	}
+
+};
+
+
+struct StaticGameInfo {
+	long       time_limit;
+	PlayerRole self_role;
+
+	StaticGameInfo()
+		: time_limit(0)
+		, self_role(PlayerRole::ATTACKER)
+	{ }
+
+	static StaticGameInfo decode(const Element& e){
+		if(e.is_nil()){ return StaticGameInfo(); }
+		const auto& e_list = e.as_list();
+		StaticGameInfo info;
+		info.time_limit = e_list[0].as_number();
+		info.self_role  = static_cast<PlayerRole>(e_list[1].as_number());
+		return info;
+	}
+};
+
+struct GameState {
+	long elapsed;
+
+	GameState()
+		: elapsed(0)
+	{ }
+
+	static GameState decode(const Element& e){
+		if(e.is_nil()){ return GameState(); }
+		const auto& e_list = e.as_list();
+		GameState state;
+		state.elapsed = e_list[0].as_number();
+		return state;
+	}
+};
+
+struct GameResponse {
+	GameStage      stage;
+	StaticGameInfo static_info;
+	GameState      state;
+
+	GameResponse()
+		: stage(GameStage::NOT_STARTED)
+		, static_info()
+		, state()
+	{ }
+
+	static GameResponse decode(const Element& e){
+		if(e.is_nil()){ return GameResponse(); }
+		const auto& e_list = e.as_list();
+		GameResponse res;
+		res.stage       = static_cast<GameStage>(e_list[1].as_number());
+		res.static_info = StaticGameInfo::decode(e_list[2]);
+		res.state       = GameState::decode(e_list[3]);
+		return res;
+	}
 };
 
 
@@ -356,6 +444,14 @@ private:
 		return Element(std::move(root));
 	}
 
+	Element construct_command_query(Element e) const {
+		std::vector<Element> root;
+		root.push_back(Element(4));
+		root.push_back(Element(m_player_key));
+		root.push_back(std::move(e));
+		return Element(std::move(root));
+	}
+
 public:
 	GalaxyContext()
 		: m_player_key(0)
@@ -372,14 +468,12 @@ public:
 #ifdef GALAXY_VERBOSE
 		std::cerr << "<< " << serialize(q) << std::endl;
 #endif
-		const auto res = m_remote(modulate(q));
-		const auto dem = demodulate(res);
+		const auto res = demodulate(m_remote(modulate(q)));
 #ifdef GALAXY_VERBOSE
-		std::cerr << ">> " << serialize(dem) << std::endl;
+		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
-		// TODO which is an attacker?
 		RoomInfo ri;
-		for(const auto& e : dem.as_list()[1].as_list()){
+		for(const auto& e : res.as_list()[1].as_list()){
 			const auto vs = e.as_list();
 			if(vs[0].as_number() == 0){
 				ri.attacker_key = vs[1].as_number();
@@ -390,26 +484,40 @@ public:
 		return ri;
 	}
 
-	void join(){
+	GameResponse join(){
 		const auto q = construct_join_query();
 #ifdef GALAXY_VERBOSE
 		std::cerr << "<< " << serialize(q) << std::endl;
 #endif
-		const auto res = m_remote(modulate(q));
+		const auto res = demodulate(m_remote(modulate(q)));
 #ifdef GALAXY_VERBOSE
-		std::cerr << ">> " << serialize(demodulate(res)) << std::endl;
+		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
+		return GameResponse::decode(res);
 	}
 
-	void start(const StartParams& params){
+	GameResponse start(const StartParams& params){
 		const auto q = construct_start_query(params);
 #ifdef GALAXY_VERBOSE
 		std::cerr << "<< "  << serialize(q) << std::endl;
 #endif
-		const auto res = m_remote(modulate(q));
+		const auto res = demodulate(m_remote(modulate(q)));
 #ifdef GALAXY_VERBOSE
-		std::cerr << ">> " << serialize(demodulate(res)) << std::endl;
+		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
+		return GameResponse::decode(res);
+	}
+
+	GameResponse command(const CommandListBuilder& cl){
+		const auto q = construct_command_query(cl.build());
+#ifdef GALAXY_VERBOSE
+		std::cerr << "<< "  << serialize(q) << std::endl;
+#endif
+		const auto res = demodulate(m_remote(modulate(q)));
+#ifdef GALAXY_VERBOSE
+		std::cerr << ">> " << serialize(res) << std::endl;
+#endif
+		return GameResponse::decode(res);
 	}
 
 };
