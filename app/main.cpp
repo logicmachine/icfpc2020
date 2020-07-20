@@ -5,6 +5,7 @@
 #include <queue>
 #include <tuple>
 #include <map>
+#include <algorithm>
 
 namespace galaxy {
 
@@ -70,11 +71,13 @@ Vec compute_accel(const Vec& p, const Vec& d, long ur, long gr){
 	}
 }
 
-
-
-bool alive(Vec pos, Vec vel, int turn, int rad) {
+bool alive(Vec pos, Vec vel, int turn, int rad, bool dump = false) {
 
 	for (int i = 0; i < turn; i++) {
+
+		if (dump) {
+			std::cout << pos.x << ", " << pos.y << std::endl;
+		}
 
 		std::tie(pos, vel) = simulate(pos, vel);
 
@@ -119,24 +122,36 @@ std::vector<Vec> search_alive(const Vec init_pos, const Vec init_vel, int rad, i
 		for (int ai = 0; ai < 8; ai++) {
 			auto a = as[ai];
 
-			auto nvel = vel + gravity(pos) + a;
-			auto npos = pos + nvel;
+			const auto nvel = vel + gravity(pos) - a;
+			const auto npos = pos + nvel;
 
 			auto ns = std::make_tuple(depth + 1, ai, npos, nvel);
-			prev[ns] = cs;
 
-			if (alive(npos, nvel, 256, rad)) {
+			if (alive(npos, nvel, 256, rad + 4)) {
+				
+				prev[ns] = cs;
 
 				std::vector<Vec> recur;
 				recur.push_back(as[ai]);
 
-				while (std::get<1>(cs) != -1) {
-					auto ps = prev[cs];
+				while (true) {
+					auto ps = prev[ns];
+					if (std::get<1>(ps) == -1) {
+						break;
+					}
 					recur.push_back(as[std::get<1>(ps)]);
-					cs = ps;
+					ns = ps;
 				}
+
+				std::reverse(recur.begin(), recur.end());
+				assert(recur.size() == depth + 1);
 				return recur;
 			}
+
+			if (depth + 1 <= max_depth && prev.find(ns) == prev.end()) {
+				que.push(ns);
+			}
+			prev[ns] = cs;
 		}
 	}
 	return std::vector<Vec>();
@@ -167,7 +182,11 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 		-  2 * ship_params.x3;
 	res = ctx.start(ship_params);
 
+	const auto rad = res.static_info.galaxy_radius;
+
 	int base_shipid = 0;
+
+	std::vector<Vec> move_cache;
 
 	// Command loop
 	long counter = 0;
@@ -188,13 +207,21 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
 			if(ship.role == res.static_info.self_role){
-
-				// shoot
-
-
-
+				
 				// move
+				if (move_state == MoveState::PREPARE_REVOLUTION) {
 
+					if (move_cache.empty()) {
+						move_cache = search_alive(ship.pos, ship.vel, rad, 6);
+						assert(!move_cache.empty());
+					}
+
+					cmds.accel(ship.id, move_cache.back());
+					move_cache.pop_back();
+					if (move_cache.empty()) {
+						move_state = MoveState::WAIT;
+					}
+				}
 			}
 		}
 
