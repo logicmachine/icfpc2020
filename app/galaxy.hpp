@@ -47,6 +47,12 @@ struct Vec {
 	long x, y;
 	Vec() : x(0), y(0) { }
 	Vec(long x, long y) : x(x), y(y) { }
+	bool operator==(const Vec& v) const { return x == v.x && y == v.y; }
+	bool operator!=(const Vec& v) const { return x != v.x || y != v.y; }
+	bool operator< (const Vec& v) const { return (x == v.x) ? (y < v.y) : (x < v.x); }
+	bool operator> (const Vec& v) const { return v < *this; }
+	bool operator<=(const Vec& v) const { return !(*this > v); }
+	bool operator>=(const Vec& v) const { return !(*this < v); }
 };
 
 
@@ -391,24 +397,65 @@ public:
 		return Element(m_commands);
 	}
 
+	void accel(long ship_id, const Vec& v){
+		std::vector<Element> root;
+		root.emplace_back(0);
+		root.emplace_back(ship_id);
+		root.emplace_back(v);
+		m_commands.push_back(std::move(root));
+	}
+
+	void detonate(long ship_id){
+		std::vector<Element> root;
+		root.emplace_back(1);
+		root.emplace_back(ship_id);
+		m_commands.push_back(std::move(root));
+	}
+
+	void shoot(long ship_id, const Vec& target, long power){
+		std::vector<Element> root;
+		root.emplace_back(2);
+		root.emplace_back(ship_id);
+		root.emplace_back(target);
+		root.emplace_back(power);
+		m_commands.push_back(std::move(root));
+	}
+
+	void fork(long ship_id, const ShipParams& new_params){
+		std::vector<Element> root;
+		root.emplace_back(3);
+		root.emplace_back(ship_id);
+		root.emplace_back(new_params.encode());
+		m_commands.push_back(std::move(root));
+	}
+
 };
 
 
 struct StaticGameInfo {
 	long       time_limit;
 	PlayerRole self_role;
+	long       parameter_capacity;
+	long       galaxy_radius;
+	long       universe_radius;
 
 	StaticGameInfo()
 		: time_limit(0)
 		, self_role(PlayerRole::ATTACKER)
+		, parameter_capacity(0)
+		, galaxy_radius(0)
+		, universe_radius(0)
 	{ }
 
 	static StaticGameInfo decode(const Element& e){
 		if(e.is_nil()){ return StaticGameInfo(); }
 		const auto& e_list = e.as_list();
 		StaticGameInfo info;
-		info.time_limit = e_list[0].as_number();
-		info.self_role  = static_cast<PlayerRole>(e_list[1].as_number());
+		info.time_limit         = e_list[0].as_number();
+		info.self_role          = static_cast<PlayerRole>(e_list[1].as_number());
+		info.parameter_capacity = e_list[2].as_list()[0].as_number();
+		info.galaxy_radius      = e_list[3].as_list()[0].as_number();
+		info.universe_radius    = e_list[3].as_list()[1].as_number();
 		return info;
 	}
 
@@ -416,6 +463,9 @@ struct StaticGameInfo {
 		const std::string prefix(depth * 2, ' ');
 		os << prefix << "time_limit: " << time_limit << std::endl;
 		os << prefix << "self_role: " << self_role << std::endl;
+		os << prefix << "parameter_capacity: " << parameter_capacity << std::endl;
+		os << prefix << "galaxy_radius: " << galaxy_radius << std::endl;
+		os << prefix << "universe_radius: " << universe_radius << std::endl;
 	}
 };
 
@@ -425,6 +475,9 @@ struct ShipState {
 	Vec        pos;
 	Vec        vel;
 	ShipParams params;
+	long       x5;
+	long       x6;
+	long       x7;
 
 	ShipState()
 		: role(PlayerRole::ATTACKER)
@@ -432,6 +485,9 @@ struct ShipState {
 		, pos()
 		, vel()
 		, params()
+		, x5(0)
+		, x6(0)
+		, x7(0)
 	{ }
 
 	static ShipState decode(const Element& e){
@@ -443,6 +499,9 @@ struct ShipState {
 		state.pos    = e_list[2].as_vector();
 		state.vel    = e_list[3].as_vector();
 		state.params = ShipParams::decode(e_list[4]);
+		state.x5     = e_list[5].as_number();
+		state.x6     = e_list[6].as_number();
+		state.x7     = e_list[7].as_number();
 		return state;
 	}
 
@@ -453,6 +512,9 @@ struct ShipState {
 		os << prefix << "pos: (" << pos.x << ", " << pos.y << ")" << std::endl;
 		os << prefix << "vel: (" << vel.x << ", " << vel.y << ")" << std::endl;
 		os << prefix << "params:" << std::endl;
+		os << prefix << "x5: " << x5 << std::endl;
+		os << prefix << "x6: " << x6 << std::endl;
+		os << prefix << "x7: " << x7 << std::endl;
 		params.dump(os, depth + 1);
 	}
 };
