@@ -121,38 +121,13 @@ bool random_accel(const Vec& p, const Vec& d, long fld_radius, long planet_radiu
 	return false;		
 }
 
-// pos, vel
-const long FLD_SIZE = 64;
-const long VEL_SIZE = 10;
-long precalc_memo[FLD_SIZE + 1][FLD_SIZE + 1][VEL_SIZE * 2 + 1][VEL_SIZE * 2 + 1];
 void precalc_orbit(long fld_r, long pln_r) {
-	for (long y = 0; y < FLD_SIZE; ++y) {
-		for (long x = 0; x < FLD_SIZE; ++x) {
-			for (long vy = -VEL_SIZE; vy <= VEL_SIZE; ++vy) {
-				for (long vx = -VEL_SIZE; vx <= VEL_SIZE; ++vx) {
-					Vec pos(x, y);
-					Vec vel(vx, vy);
-					
-					precalc_memo[y][x][vy + VEL_SIZE][vx + VEL_SIZE] = universe_check_step(pos, vel, fld_r, pln_r);
-				}
-			}
-		}
-	}
+	
 }
 
-long get_orbit_step(Vec pos, Vec vel) {
-	if (pos.x < 0) {
-		pos.x *= -1;
-		vel.x *= -1;
-	}
-	if (pos.y < 0) {
-		pos.y *= -1;
-		vel.y *= -1;
-	}
-
-	if (pos.x >= FLD_SIZE || pos.y >= FLD_SIZE || std::abs(vel.x) > VEL_SIZE || std::abs(vel.y) > VEL_SIZE)
-		return -1;
-	return precalc_memo[pos.y][pos.x][vel.y + VEL_SIZE][vel.x + VEL_SIZE];
+long get_orbit_step(Vec pos, Vec vel, long fld_r, long pln_r) {
+	long step = universe_check_step(pos, vel, fld_r, pln_r);
+	return step;
 }
 
 bool find_neighbor_orbit(
@@ -161,6 +136,8 @@ bool find_neighbor_orbit(
 	, long time_
 	, Vec& res
 	, int step_
+	, long fld_r
+	, long pln_r
 ) {
 	// vx, vy, time, step, pos, vel
 	using State = std::tuple<long, long, long, long, Vec, Vec>;
@@ -183,7 +160,7 @@ bool find_neighbor_orbit(
 				long first_vy = step == step_ ? n_vy : vy;
 
 				const auto next = simulate(pos, Vec(vel.x - n_vx, vel.y - n_vy));
-				long alive_turn = get_orbit_step(next.first, next.second);
+				long alive_turn = get_orbit_step(next.first, next.second, fld_r, pln_r);
 
 				if (alive_turn >= time) {
 					res.x = first_vx;
@@ -244,7 +221,7 @@ void defender(
 
 			if (!on_orbit.count(ship.id)) on_orbit[ship.id] = false;
 			
-			if (rest_time <= get_orbit_step(ship.pos, ship.vel)) {
+			if (rest_time <= get_orbit_step(ship.pos, ship.vel, res.static_info.universe_radius, res.static_info.galaxy_radius)) {
 				on_orbit[ship.id] = true;
 			}
 			
@@ -252,12 +229,14 @@ void defender(
 #ifdef LOCAL_DEBUG
 				std::cerr << "on orbit" << std::endl;
 #endif
+
+
 				continue;
 			}
 
 			Vec accel;
 			int step = 3;
-			bool found = find_neighbor_orbit(ship.pos, ship.vel, rest_time, accel, step);
+			bool found = find_neighbor_orbit(ship.pos, ship.vel, rest_time, accel, step, res.static_info.universe_radius, res.static_info.galaxy_radius);
 
 			if (found) {
 #ifdef LOCAL_DEBUG
