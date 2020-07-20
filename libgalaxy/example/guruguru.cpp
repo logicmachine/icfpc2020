@@ -51,20 +51,35 @@ int main(int argc, char *argv[]){
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 - 40 : 446) - 120;  // TODO
-	ship_params.x1 = (self_role == galaxy::PlayerRole::ATTACKER ? 10 : 0);
-	ship_params.x2 = 10;
-	ship_params.x3 = 1;
-	res = ctx.start(ship_params);
+  if (self_role == galaxy::PlayerRole::ATTACKER) {
+    ship_params.x1 =  64;
+    ship_params.x2 = 10;
+    ship_params.x3 =  1;
+    ship_params.x0 =
+        res.static_info.parameter_capacity
+        -  4 * ship_params.x1
+        - 12 * ship_params.x2
+        -  2 * ship_params.x3;
+  }
+  else {
+    ship_params.x1 = 0;
+    ship_params.x2 = 10;
+    ship_params.x3 = 1;
+    ship_params.x0 =
+      res.static_info.parameter_capacity
+      -  4 * ship_params.x1
+      - 12 * ship_params.x2
+      -  2 * ship_params.x3;
+  }
+  res = ctx.start(ship_params);
 
 	// Command loop
-	
 	long counter = 0;
+  long prev_attack_counter = 0;
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
 
 		galaxy::CommandListBuilder cmds;
-    galaxy::CommandListBuilder cmds2;
     int eneId = -1;
     int myId = -1;
     bool attack = false;
@@ -120,16 +135,15 @@ int main(int argc, char *argv[]){
         const auto& opship = res.state.ships[eneId].ship;
 
         double distEne = std::sqrt(double((myship.pos.x - opship.pos.x) * (myship.pos.x - opship.pos.x) + (myship.pos.y - opship.pos.y) * (myship.pos.y - opship.pos.y)));
-        if (distEne < 256) {
+        if (distEne < 160 && counter - prev_attack_counter > 15) {
           attack = true;
-          cmds2.shoot(myship.id, opship.pos);
+          cmds.shoot(myship.id, opship.pos, myship.params.x1);
+          prev_attack_counter = counter;
         }
       }
     }
-    if (attack)
-      res = ctx.command(cmds2);
-    else 
-		  res = ctx.command(cmds);
+    
+		res = ctx.command(cmds);
 		++counter;
 	}
 
