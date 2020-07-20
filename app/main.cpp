@@ -269,7 +269,7 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 					for (auto &op_ship_sac : res.state.ships) {
 						auto &op_ship = op_ship_sac.ship;
 						if (op_ship.role != res.static_info.self_role)	{
-							if (distance(op_ship.pos, ship.pos) <= 5 {
+							if (distance(op_ship.pos, ship.pos) <= 5) {
 								cmds.detonate(ship.id);
 							}
 						}
