@@ -1,5 +1,6 @@
 #include "../include/galaxy.hpp"
 #include <cmath>
+#include <map>
 
 galaxy::Vec gravity_force(const galaxy::Vec& ship_pos, const galaxy::StaticGameInfo& info) {
   long r = info.galaxy_radius;
@@ -99,6 +100,62 @@ public:
   }
 };
 
+class ShipKidouState {
+public:
+  bool is_on_kidou = false;
+  long kidou_idx = -1;
+  long shipId = -1;
+  std::vector<Vec> kidou_plan_accel;
+};
+
+// X0 または Y0方向に低速度で近づける
+Vec toX0orY0(const galaxy::ShipState& ship, const galaxy::StaticGameInfo& static_info) {
+  galaxy::Vec grav_acc = gravity_force(ship.pos, static_info);
+  long x = ship.pos.x;
+  long y = ship.pos.y;
+  long distx = abs(x);
+  long disty = abs(y);
+
+  long addx = 0, addy = 0;
+  bool toY0 = false;
+  const long accel_limit = 3;
+
+  if (disty <= distx) toY0 = true;
+  if (toY0) {
+    if (x != 0) addx = (x < 0 ? 1 : -1);
+    if (y != 0) addy = (y < 0 ? -1 : 1);
+  }
+  else {
+    if (x != 0) addx = (x < 0 ? -1 : 1);
+    if (y != 0) addy = (y < 0 ? 1 : -1);
+  }
+  long nextvx, nextvy;
+  nextvx = ship.vel.x - addx + grav_acc.x;
+  nextvy = ship.vel.y - addy + grav_acc.y;
+  if (toY0) {
+    if (abs(y) <= 3 && abs(nextvy) > 0) addy = -addy;
+    else if (abs(nextvy) >= accel_limit) addy = 0; // 進行方向に加速しすぎない
+  }
+  else {
+    if (abs(x) <= 3 && abs(nextvx) > 0) addx = -addx;
+    if (abs(nextvx) >= accel_limit) addx = 0;
+  }
+  return Vec(addx, addy);
+}
+
+// なんとなく動かす（惑星付近にいる時に端に逃げるように）
+Vec escape_from_galaxy(const galaxy::ShipState& ship, const long near_galaxy_dist) {
+  long long dx = 0, dy = 0;
+  const long kidou_vec = 5;
+  if (abs(ship.pos.x) <= near_galaxy_dist && abs(ship.vel.x) < kidou_vec) {
+    dx = ship.vel.x < 0 ? 1 : -1;
+  }
+  if (abs(ship.pos.y) <= near_galaxy_dist && abs(ship.vel.y) < kidou_vec) {
+    dy = ship.vel.y < 0 ? 1 : -1;
+  }
+  return Vec(dx, dy);
+}
+
 int main(int argc, char *argv[]){
 	if(argc < 3){
 		std::cerr << "Usage: " << argv[0] << " endpoint player_key" << std::endl;
@@ -133,8 +190,8 @@ int main(int argc, char *argv[]){
   }
   else {
     ship_params.x1 = 0;
-    ship_params.x2 = 10;
-    ship_params.x3 = 1;
+    ship_params.x2 = 8;
+    ship_params.x3 = 50;
     ship_params.x0 =
       res.static_info.parameter_capacity
       -  4 * ship_params.x1
@@ -145,92 +202,54 @@ int main(int argc, char *argv[]){
 
 	// Command loop
 	long counter = 0;
-  long prev_attack_counter = 0;
-  bool inKidou = false;
-  long kidou_idx = -1;
-  std::vector<Vec> kidou_plan_accel;
-
-  const long breaking_pos = 4;
-  const long kidou_vec = 5;
+  const long near_galaxy_dist = 4;
+  std::map<long, ShipKidouState> ship_state_dic;
+  
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
 
 		galaxy::CommandListBuilder cmds;
-    int eneId = -1;
-    int myId = -1;
-    bool attack = false;
-    for (int i = 0; i < res.state.ships.size(); i++) {
+    for (int i = 0; i < (int)res.state.ships.size(); i++) {
       const auto& sac = res.state.ships[i];
       const auto& ship = sac.ship;
-      if (ship.role != res.static_info.self_role) { eneId = i; continue; }
-      else myId = i;
+      if (ship.role != res.static_info.self_role) { continue; }
       if (ship.params.x0 <= 50) { continue; }  // TODO
 
-      long r = res.static_info.galaxy_radius;
-      long x = ship.pos.x;
-      long y = ship.pos.y;
+      // 取り出し
+      if (ship_state_dic.find(i) == ship_state_dic.end()) {
+        ship_state_dic[i] = ShipKidouState();
+      }
+      ShipKidouState& ship_state = ship_state_dic[i];
+      long& kidou_idx = ship_state.kidou_idx;
+      auto& kidou_plan_accel = ship_state.kidou_plan_accel;
+      auto& is_on_kidou = ship_state.is_on_kidou;
+
+      long galaxy_radius = res.static_info.galaxy_radius;
       long rem_turn = res.static_info.time_limit - res.state.elapsed;
-      galaxy::Vec gravAcc = gravity_force(ship.pos, res.static_info);
 
       if (kidou_idx >= 0) {
-        if (kidou_idx < kidou_plan_accel.size()) {
+        if (kidou_idx < (int)kidou_plan_accel.size()) {
           cmds.accel(ship.id, kidou_plan_accel[kidou_idx++]);
         }
       }
-      else if (inKidou || abs(x) <= breaking_pos || abs(y) <= breaking_pos) {
+      else if (is_on_kidou || abs(ship.pos.x) <= near_galaxy_dist || abs(ship.pos.y) <= near_galaxy_dist) {
         // n手シミュレートする
-        SimulateN sim(rem_turn, r, 3);
+        SimulateN sim(rem_turn, galaxy_radius, 3);
         sim.simulate_n(ship.pos, ship.vel, 0);
-        if (sim.dead_turn == rem_turn) {
-          // std::cerr << res.state.elapsed << ": ========================== In kidou ==========================" << std::endl;
-          // std::cerr << sim.ans.size() << " " << sim.ans[0].x << " " << sim.ans[0].y << std::endl;
+        if (sim.dead_turn == rem_turn) { // 死ぬまでのターンが返ってくるので最後まで活きていたら
           kidou_plan_accel = sim.ans;
           kidou_idx = 0;
           cmds.accel(ship.id, kidou_plan_accel[kidou_idx++]);
         }
         else {
           // なんとなく動かす（惑星付近にいる時に端に逃げるように）
-          long long dx = 0, dy = 0;
-          inKidou = true;
-          if (abs(x) <= breaking_pos && abs(ship.vel.x) < kidou_vec) {
-            dx = ship.vel.x < 0 ? 1 : -1;
-          }
-          if (abs(y) <= breaking_pos && abs(ship.vel.y) < kidou_vec) {
-            dy = ship.vel.y < 0 ? 1 : -1;
-          }
-          cmds.accel(ship.id, galaxy::Vec(dx, dy));
+          cmds.accel(ship.id, escape_from_galaxy(ship, near_galaxy_dist));
+          is_on_kidou = true;
         }
       }
       else {
         // X0 または Y0方向に低速度で近づける
-        long distx = abs(x);
-        long disty = abs(y);
-
-        long addx = 0, addy = 0;
-        bool toY0 = false;
-        const long accel_limit = 3;
-
-        if (disty <= distx) toY0 = true;
-        if (toY0) {
-          if (x != 0) addx = (x < 0 ? 1 : -1);
-          if (y != 0) addy = (y < 0 ? -1 : 1);
-        }
-        else {
-          if (x != 0) addx = (x < 0 ? -1 : 1);
-          if (y != 0) addy = (y < 0 ? 1 : -1);
-        }
-        long nextvx, nextvy;
-        nextvx = ship.vel.x - addx + gravAcc.x;
-        nextvy = ship.vel.y - addy + gravAcc.y;
-        if (toY0) {
-          if (abs(y) <= 3 && abs(nextvy) > 0) addy = -addy;
-          else if (abs(nextvy) >= accel_limit) addy = 0; // 進行方向に加速しすぎない
-        }
-        else {
-          if (abs(x) <= 3 && abs(nextvx) > 0) addx = -addx;
-          if (abs(nextvx) >= accel_limit) addx = 0;
-        }
-        cmds.accel(ship.id, galaxy::Vec(addx, addy));
+        cmds.accel(ship.id, toX0orY0(ship, res.static_info));
       }
     }
 		res = ctx.command(cmds);
