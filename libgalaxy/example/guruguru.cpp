@@ -1,4 +1,5 @@
-#include "galaxy.hpp"
+#include "../include/galaxy.hpp"
+#include <cmath>
 
 galaxy::Vec gravity_force(const galaxy::Vec& ship_pos, const galaxy::StaticGameInfo& info) {
   long r = info.galaxy_radius;
@@ -50,8 +51,8 @@ int main(int argc, char *argv[]){
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 : 446) - 120;  // TODO
-	ship_params.x1 = 0;
+	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 - 40 : 446) - 120;  // TODO
+	ship_params.x1 = (self_role == galaxy::PlayerRole::ATTACKER ? 10 : 0);
 	ship_params.x2 = 10;
 	ship_params.x3 = 1;
 	res = ctx.start(ship_params);
@@ -63,9 +64,15 @@ int main(int argc, char *argv[]){
 		res.dump(std::cerr);
 
 		galaxy::CommandListBuilder cmds;
-    for(const auto& sac : res.state.ships){
+    galaxy::CommandListBuilder cmds2;
+    int eneId = -1;
+    int myId = -1;
+    bool attack = false;
+    for (int i = 0; i < res.state.ships.size(); i++) {
+      const auto& sac = res.state.ships[i];
       const auto& ship = sac.ship;
-      if(ship.role != res.static_info.self_role){ continue; }
+      if (ship.role != res.static_info.self_role) { eneId = i; continue; }
+      else myId = i;
       if(ship.params.x0 <= 50){ continue; }  // TODO
 
       long distx = std::min(abs(ship.pos.x - res.static_info.galaxy_radius), abs(ship.pos.x + res.static_info.galaxy_radius));
@@ -107,7 +114,22 @@ int main(int argc, char *argv[]){
 
       cmds.accel(ship.id, galaxy::Vec(dx, dy));
     }
-		res = ctx.command(cmds);
+    if (myId != -1) {
+        const auto& myship = res.state.ships[myId].ship;
+        if (eneId != -1 && myship.role == galaxy::PlayerRole::ATTACKER) {
+        const auto& opship = res.state.ships[eneId].ship;
+
+        double distEne = std::sqrt(double((myship.pos.x - opship.pos.x) * (myship.pos.x - opship.pos.x) + (myship.pos.y - opship.pos.y) * (myship.pos.y - opship.pos.y)));
+        if (distEne < 256) {
+          attack = true;
+          cmds2.shoot(myship.id, opship.pos);
+        }
+      }
+    }
+    if (attack)
+      res = ctx.command(cmds2);
+    else 
+		  res = ctx.command(cmds);
 		++counter;
 	}
 
