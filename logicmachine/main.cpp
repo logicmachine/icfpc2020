@@ -35,22 +35,23 @@ std::pair<Vec, Vec> simulate(const Vec& p0, const Vec& d0){
 	return std::make_pair(p, d);
 }
 
-bool universe_check(const Vec& p0, const Vec& d0, int n, long r){
+bool universe_check(const Vec& p0, const Vec& d0, int n, long ur, long gr){
 	Vec p = p0, d = d0;
 	for(int i = 0; i < n; ++i){
 		const auto next = simulate(p, d);
-		if(std::abs(next.first.x) > r){ return false; }
-		if(std::abs(next.first.y) > r){ return false; }
+		if(std::abs(next.first.x) > ur){ return false; }
+		if(std::abs(next.first.y) > ur){ return false; }
+		if(std::abs(next.first.x) <= gr && std::abs(next.first.y) <= gr){ break; }
 		p = next.first;
 		d = next.second;
 	}
 	return true;
 }
 
-Vec compute_accel(const Vec& p, const Vec& d, long radius){
+Vec compute_accel(const Vec& p, const Vec& d, long ur, long gr){
 	const Vec dd(p.x >= 0 ? -1 : 1, p.y >= 0 ? -1 : 1);
 	const auto next = simulate(p, Vec(d.x - dd.x, d.y - dd.y));
-	if(universe_check(next.first, next.second, UNIVERSE_CHECK_ITERATIONS, radius)){
+	if(universe_check(next.first, next.second, UNIVERSE_CHECK_ITERATIONS, ur, gr)){
 		return dd;
 	}else{
 		return Vec();
@@ -86,7 +87,9 @@ void defender(
 			const auto& ship = sac.ship;
 			if(ship.role != res.static_info.self_role){ continue; }
 			const auto accel = compute_accel(
-				ship.pos, ship.vel, res.static_info.universe_radius);
+				ship.pos, ship.vel,
+				res.static_info.universe_radius,
+				res.static_info.galaxy_radius);
 			if(accel.x != 0 || accel.y != 0){
 				cmds.accel(ship.id, accel);
 			}
@@ -204,6 +207,7 @@ void attacker(
 	const long bound_radius = std::max(
 		res.static_info.universe_radius / 3,
 		res.static_info.galaxy_radius + 16);
+
 	HistoricalPredictor historical_predictor;
 	InertialPredictor inertial_predictor;
 
@@ -214,7 +218,8 @@ void attacker(
 			const auto& ship = sac.ship;
 			if(ship.role == res.static_info.self_role){
 				// Acceleration
-				const auto accel = compute_accel(ship.pos, ship.vel, bound_radius);
+				const auto accel = compute_accel(
+					ship.pos, ship.vel, bound_radius, res.static_info.galaxy_radius);
 				if(accel.x != 0 || accel.y != 0){ cmds.accel(ship.id, accel); }
 				// Shooting
 				if(ship.x5 > 0){ continue; } // TODO
