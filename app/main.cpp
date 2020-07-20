@@ -91,7 +91,7 @@ bool alive(Vec pos, Vec vel, int turn, int rad, bool dump = false) {
 using State = std::tuple<int, int, Vec, Vec>;
 
 
-std::vector<Vec> search_alive(const Vec init_pos, const Vec init_vel, int rad, int max_depth) {
+std::vector<Vec> search_alive(const Vec init_pos, const Vec init_vel, int rad, int max_depth, int max_turn) {
 	
 	auto ss = std::make_tuple(0, -1, init_pos, init_vel);
 
@@ -127,7 +127,8 @@ std::vector<Vec> search_alive(const Vec init_pos, const Vec init_vel, int rad, i
 
 			auto ns = std::make_tuple(depth + 1, ai, npos, nvel);
 
-			if (alive(npos, nvel, 256, rad + 4)) {
+			// add variance
+			if (depth <= 3 && alive(npos, nvel, max_turn, rad + 4)) {
 				
 				prev[ns] = cs;
 
@@ -159,6 +160,7 @@ std::vector<Vec> search_alive(const Vec init_pos, const Vec init_vel, int rad, i
 
 enum class MoveState {
 	PREPARE_REVOLUTION,
+	PREPARE_FORK,
 	WAIT,
 };
 
@@ -167,13 +169,13 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 
 	const auto self_role = res.static_info.self_role;
 
-	MoveState move_state = MoveState::PREPARE_REVOLUTION;
+	const int target_ship_count = 10;
 
 	// Start
 	galaxy::ShipParams ship_params;
 	ship_params.x1 =  0;
 	ship_params.x2 = 10;
-	ship_params.x3 = 10;
+	ship_params.x3 = target_ship_count;
 
 	ship_params.x0 = 
 		  res.static_info.parameter_capacity
@@ -184,9 +186,13 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 
 	const auto rad = res.static_info.galaxy_radius;
 
-	int base_shipid = 0;
+	std::map<int, MoveState> shipid_state;
 
-	std::vector<Vec> move_cache;
+	int base_shipid = 0;
+	int ship_count = 1;
+	int sleep = 5;
+
+	std::map<int, std::vector<Vec>> move_cache;
 
 	// Command loop
 	long counter = 0;
@@ -200,6 +206,7 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 			const auto& ship = sac.ship;
 			if (counter == 0) {
 				base_shipid = ship.id;
+				shipid_state[base_shipid] = MoveState::PREPARE_REVOLUTION;
 			}
 		}
 
@@ -208,19 +215,46 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 			const auto& ship = sac.ship;
 			if(ship.role == res.static_info.self_role){
 				
+				// register
+				if (shipid_state.find(ship.id) == shipid_state.end()) {
+					shipid_state[ship.id] = MoveState::PREPARE_REVOLUTION;
+				}
+
 				// move
-				if (move_state == MoveState::PREPARE_REVOLUTION) {
+				if (shipid_state[ship.id] == MoveState::PREPARE_REVOLUTION) {
 
-					if (move_cache.empty()) {
-						move_cache = search_alive(ship.pos, ship.vel, rad, 6);
-						assert(!move_cache.empty());
+					if (move_cache[ship.id].empty()) {
+						move_cache[ship.id] = search_alive(ship.pos, ship.vel, rad, 6, res.static_info.time_limit);
+						assert(!move_cache[ship.id].empty());
 					}
 
-					cmds.accel(ship.id, move_cache.back());
-					move_cache.pop_back();
-					if (move_cache.empty()) {
-						move_state = MoveState::WAIT;
+					cmds.accel(ship.id, move_cache[ship.id].back());
+					move_cache[ship.id].pop_back();
+					if (move_cache[ship.id].empty()) {
+						if (ship.id == base_shipid) {
+							shipid_state[ship.id] = MoveState::PREPARE_FORK;
+						} else {
+							shipid_state[ship.id] = MoveState::WAIT;
+						}
 					}
+				}
+				if (shipid_state[ship.id] == MoveState::PREPARE_FORK) {
+					if (--sleep == 0) {
+						galaxy::ShipParams params;
+						params.x1 = 0;
+						params.x2 = 0;
+						params.x3 = 1;
+						params.x0 = ship.params.x0 / (1 + target_ship_count - ship_count);
+						cmds.fork(ship.id, params);
+						ship_count++;
+						if (target_ship_count == ship_count) {
+							shipid_state[ship.id] = MoveState::WAIT;
+						}
+						sleep = 5;
+					}					
+				}
+				if (shipid_state[ship.id] == MoveState::WAIT) {
+					// pass
 				}
 			}
 		}
