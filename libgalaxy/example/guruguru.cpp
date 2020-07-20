@@ -50,9 +50,9 @@ int dead_check(const Vec& p0, const Vec& d0, int n, long r, long fieldr){
 	Vec p = p0, d = d0;
 	for(int i = 0; i < n; ++i){
 		const auto next = simulate(p, d, r);
-		if (std::abs(next.first.x) <= r && std::abs(next.first.y) <= r) return i;
-    if (std::abs(next.first.x) >= fieldr) return i;
-    if (std::abs(next.first.y) >= fieldr) return i;
+		if (std::abs(next.first.x) <= r + 2 && std::abs(next.first.y) <= r + 2) return i;
+    if (std::abs(next.first.x) >= fieldr - 1) return i;
+    if (std::abs(next.first.y) >= fieldr - 1) return i;
 		p = next.first;
 		d = next.second;
 	}
