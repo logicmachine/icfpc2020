@@ -9,7 +9,7 @@
 // Settings
 //----------------------------------------------------------------------------
 const int UNIVERSE_CHECK_ITERATIONS = 15;
-const double RELATIVE_ANGLE_THRESHOLD = 0.2;
+const int RELATIVE_ANGLE_THRESHOLD = 4;
 
 
 //----------------------------------------------------------------------------
@@ -104,8 +104,9 @@ void defender(
 //----------------------------------------------------------------------------
 double check_relative_angle(const Vec& a, const Vec& b){
 	if(a == b){ return true; }
-	const auto rad = std::atan2(static_cast<double>(b.y - a.y), static_cast<double>(b.x - a.x));
-	return std::cos(rad * 8.0) > RELATIVE_ANGLE_THRESHOLD;
+	const auto dx = std::abs(b.x - a.x);
+	const auto dy = std::abs(b.y - a.y);
+	return std::min(std::min(dx, dy), std::abs(dx - dy)) < RELATIVE_ANGLE_THRESHOLD;
 }
 
 class HistoricalPredictor {
