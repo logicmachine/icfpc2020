@@ -9,7 +9,7 @@ from PIL import Image
 def main(args):
     data = args[1]
     outfile = args[2]
-    data = data.replace("(", "").replace(")", "").replace("nil", "").replace(",", " ").strip()
+    data = data.replace("(", "").replace(")", "").replace("nil", "").replace("|", "").replace(",", " ").strip()
     data = list(map(int, data.split()))
     pos = []
     for i in range(0, len(data) - 1, 2):

@@ -421,6 +421,14 @@ public:
 		m_commands.push_back(std::move(root));
 	}
 
+	void fork(long ship_id, const ShipParams& new_params){
+		std::vector<Element> root;
+		root.emplace_back(3);
+		root.emplace_back(ship_id);
+		root.emplace_back(new_params.encode());
+		m_commands.push_back(std::move(root));
+	}
+
 };
 
 
@@ -639,9 +647,6 @@ private:
 	}
 
 public:
-	std::string m_raw_recv;  /// nf
-	std::string m_raw_send;  /// nf
-
 	GalaxyContext()
 		: m_player_key(0)
 		, m_remote()
@@ -661,9 +666,6 @@ public:
 #ifdef GALAXY_VERBOSE
 		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
-		m_raw_send = serialize(q);    /// nf
-		m_raw_recv = serialize(res);  /// nf
-
 		RoomInfo ri;
 		for(const auto& e : res.as_list()[1].as_list()){
 			const auto vs = e.as_list();
@@ -685,9 +687,6 @@ public:
 #ifdef GALAXY_VERBOSE
 		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
-		m_raw_send = serialize(q);    /// nf
-		m_raw_recv = serialize(res);  /// nf
-
 		return GameResponse::decode(res);
 	}
 
@@ -700,9 +699,6 @@ public:
 #ifdef GALAXY_VERBOSE
 		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
-		m_raw_send = serialize(q);    /// nf
-		m_raw_recv = serialize(res);  /// nf
-
 		return GameResponse::decode(res);
 	}
 
@@ -715,9 +711,6 @@ public:
 #ifdef GALAXY_VERBOSE
 		std::cerr << ">> " << serialize(res) << std::endl;
 #endif
-		m_raw_send = serialize(q);    /// nf
-		m_raw_recv = serialize(res);  /// nf
-
 		return GameResponse::decode(res);
 	}
 
