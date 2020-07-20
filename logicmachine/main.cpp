@@ -1,5 +1,6 @@
 #include <tuple>
 #include <map>
+#include <cmath>
 
 #include "galaxy.hpp"
 
@@ -8,6 +9,7 @@
 // Settings
 //----------------------------------------------------------------------------
 const int UNIVERSE_CHECK_ITERATIONS = 15;
+const double RELATIVE_ANGLE_THRESHOLD = 0.2;
 
 
 //----------------------------------------------------------------------------
@@ -97,6 +99,89 @@ void defender(
 //----------------------------------------------------------------------------
 // Attacker
 //----------------------------------------------------------------------------
+double check_relative_angle(const Vec& a, const Vec& b){
+	if(a == b){ return true; }
+	const auto rad = std::atan2(static_cast<double>(b.y - a.y), static_cast<double>(b.x - a.x));
+	return std::cos(rad * 8.0) > RELATIVE_ANGLE_THRESHOLD;
+}
+
+class HistoricalPredictor {
+
+private:
+	using ship_state_t = std::pair<Vec, Vec>;
+	std::map<long, ship_state_t> m_last_ship_states;
+	std::map<ship_state_t, Vec> m_predictions;
+
+public:
+	HistoricalPredictor()
+		: m_last_ship_states()
+		, m_predictions()
+	{ }
+
+	void update(const galaxy::ShipState& ship){
+		const ship_state_t cur_state(ship.pos, ship.vel);
+		const auto it = m_last_ship_states.find(ship.id);
+		if(it != m_last_ship_states.end()){
+			const auto prev_state = it->second;
+			m_predictions[prev_state] = ship.pos;
+		}
+		m_last_ship_states[ship.id] = cur_state;
+	}
+
+	std::pair<bool, Vec> predict(const galaxy::ShipState& ship){
+		const ship_state_t cur_state(ship.pos, ship.vel);
+		const auto it = m_predictions.find(cur_state);
+		if(it != m_predictions.end()){
+			return std::make_pair(true, it->second);
+		}else{
+			return std::make_pair(false, Vec());
+		}
+	}
+
+};
+
+class InertialPredictor {
+
+private:
+	using ship_state_t = std::pair<Vec, Vec>;
+	std::map<long, ship_state_t> m_last_ship_states;
+	std::map<long, std::pair<long, long>> m_inertial_rate;
+
+public:
+	InertialPredictor()
+		: m_last_ship_states()
+		, m_inertial_rate()
+	{ }
+
+	void update(const galaxy::ShipState& ship){
+		const ship_state_t cur_state(ship.pos, ship.vel);
+		const auto it = m_last_ship_states.find(ship.id);
+		if(it != m_last_ship_states.end()){
+			const auto prev_state = it->second;
+			const auto sim = simulate(prev_state.first, prev_state.second);
+			auto& rate = m_inertial_rate[ship.id];
+			rate.first  += (sim.first == cur_state.first);
+			rate.second += 1;
+		}else{
+			m_inertial_rate[ship.id] = std::pair<long, long>(0, 0);
+		}
+		m_last_ship_states[ship.id] = cur_state;
+	}
+
+	std::pair<bool, Vec> predict(const galaxy::ShipState& ship){
+		const auto it = m_inertial_rate.find(ship.id);
+		if(it != m_inertial_rate.end()){
+			const auto& rate = it->second;
+			if(rate.second >= 5 && 100 * rate.first / rate.second > 75){
+				const auto s = simulate(ship.pos, ship.vel);
+				return std::make_pair(true, s.first);
+			}
+		}
+		return std::make_pair(false, Vec());
+	}
+
+};
+
 void attacker(
 	galaxy::GalaxyContext& ctx,
 	const galaxy::GameResponse& init_res)
@@ -116,11 +201,11 @@ void attacker(
 	res = ctx.start(ship_params);
 
 	// Command loop
-	const long bound_radius = res.static_info.universe_radius / 2;
-
-	using ship_state_t = std::pair<Vec, Vec>;
-	std::map<long, ship_state_t> last_ship_states;
-	std::map<ship_state_t, Vec>  predictions;
+	const long bound_radius = std::max(
+		res.static_info.universe_radius / 3,
+		res.static_info.galaxy_radius + 16);
+	HistoricalPredictor historical_predictor;
+	InertialPredictor inertial_predictor;
 
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
@@ -132,18 +217,17 @@ void attacker(
 				const auto accel = compute_accel(ship.pos, ship.vel, bound_radius);
 				if(accel.x != 0 || accel.y != 0){ cmds.accel(ship.id, accel); }
 				// Shooting
-				if(ship.x5 == 0){  // TODO
-					for(const auto& target_sac : res.state.ships){
-						const auto& target = target_sac.ship;
-						if(target.role != res.static_info.self_role){
-							const ship_state_t cur_state(target.pos, target.vel);
-							const auto it = predictions.find(cur_state);
-							if(it != predictions.end()){
-								const auto key = it->first;
-								const auto p = key.first, v = key.second;
-								cmds.shoot(ship.id, it->second, ship.params.x1);
-								break;
-							}
+				if(ship.x5 > 0){ continue; } // TODO
+				for(const auto& target_sac : res.state.ships){
+					const auto& target = target_sac.ship;
+					if(target.role != res.static_info.self_role){
+						std::pair<bool, Vec> prediction;
+						prediction = historical_predictor.predict(target);
+						if(!prediction.first){
+							prediction = inertial_predictor.predict(target);
+						}
+						if(prediction.first && check_relative_angle(ship.pos, prediction.second)){
+							cmds.shoot(ship.id, prediction.second, ship.params.x1);
 						}
 					}
 				}
@@ -152,13 +236,8 @@ void attacker(
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
 			if(ship.role != res.static_info.self_role){
-				const ship_state_t cur_state(ship.pos, ship.vel);
-				const auto it = last_ship_states.find(ship.id);
-				if(it != last_ship_states.end()){
-					const auto prev_state = it->second;
-					predictions[prev_state] = ship.pos;
-				}
-				last_ship_states[ship.id] = cur_state;
+				historical_predictor.update(ship);
+				inertial_predictor.update(ship);
 			}
 		}
 		res = ctx.command(cmds);
