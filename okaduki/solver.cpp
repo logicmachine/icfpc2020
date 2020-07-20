@@ -1,6 +1,8 @@
 #include <tuple>
 #include <map>
 #include <cmath>
+#include <chrono>
+#include <queue>
 
 #include "galaxy.hpp"
 
@@ -50,6 +52,10 @@ void dump_vec(const Vec& vec, std::ostream& os) {
 	os << "(" << vec.x << ", " << vec.y << ")" << std::endl;
 }
 
+bool is_zero(const Vec& vec) {
+	return vec.x == 0 && vec.y == 0;
+}
+
 bool universe_check(const Vec& p0, const Vec& d0, int n, long fld_r, long planet_r = -1){
 	Vec p = p0, d = d0;
 	for(int i = 0; i < n; ++i){
@@ -66,7 +72,7 @@ bool universe_check(const Vec& p0, const Vec& d0, int n, long fld_r, long planet
 }
 
 int universe_check_step(const Vec& p0, const Vec& d0, long fld_r, long planet_r = -1){
-	const int MAX = 256;
+	const int MAX = 384;
 	Vec p = p0, d = d0;
 	for(int i = 0; i < MAX; ++i){
 		const auto next = simulate(p, d);
@@ -101,73 +107,96 @@ Vec compute_accel_far_away(const Vec& p, const Vec& d, long fld_radius){
 	}
 }
 
-Vec random_accel(const Vec& p, const Vec& d, long fld_radius, long planet_radius){
-	const long abs_x = std::abs(p.x), abs_y = std::abs(p.y);
+bool random_accel(const Vec& p, const Vec& d, long fld_radius, long planet_radius, Vec& res){
 	Vec dd;
-	if (abs_x < abs_y) {
-		dd.y = random(0, 2) * 2 - 1;
-		dd.x = 0;
-	}
-	else {
-		dd.x = random(0, 2) * 2 - 1;
-		dd.y = 0;
-	}
+	dd.x = random(-1, 1);
+	dd.y = random(-1, 1);
 
 	const auto next = simulate(p, Vec(d.x - dd.x, d.y - dd.y));
 	if(universe_check(next.first, next.second, UNIVERSE_CHECK_ITERATIONS, fld_radius, planet_radius)){
-		return dd;
-	}else{
-		return Vec();
+		res = dd;
+		return true;
 	}
+
+	return false;		
 }
 
 // pos, vel
-using Cache = std::tuple<long,long,long,long>;
-void precalc_orbit(long fld_r, long pln_r, std::map<Cache,long>& res) {
-	const long VEL_SIZE = 10;
-
-	for (long y = -fld_r; y <= fld_r; ++y) {
-		for (long x = -fld_r; x <= fld_r; ++x) {
+const long FLD_SIZE = 64;
+const long VEL_SIZE = 10;
+long precalc_memo[FLD_SIZE + 1][FLD_SIZE + 1][VEL_SIZE * 2 + 1][VEL_SIZE * 2 + 1];
+void precalc_orbit(long fld_r, long pln_r) {
+	for (long y = 0; y < FLD_SIZE; ++y) {
+		for (long x = 0; x < FLD_SIZE; ++x) {
 			for (long vy = -VEL_SIZE; vy <= VEL_SIZE; ++vy) {
 				for (long vx = -VEL_SIZE; vx <= VEL_SIZE; ++vx) {
 					Vec pos(x, y);
 					Vec vel(vx, vy);
 					
-					auto idx = std::make_tuple(x, y, vx, vy);
-					res[idx] = universe_check_step(pos, vel, fld_r, pln_r);
+					precalc_memo[y][x][vy + VEL_SIZE][vx + VEL_SIZE] = universe_check_step(pos, vel, fld_r, pln_r);
 				}
 			}
 		}
 	}
 }
 
-long get_orbit_step(const std::map<Cache,long>& cache, const Vec& pos, const Vec& vel) {
-	auto idx = std::make_tuple(pos.x, pos.y, vel.x, vel.y);
-	auto it = cache.find(idx);
+long get_orbit_step(Vec pos, Vec vel) {
+	if (pos.x < 0) {
+		pos.x *= -1;
+		vel.x *= -1;
+	}
+	if (pos.y < 0) {
+		pos.y *= -1;
+		vel.y *= -1;
+	}
 
-	if (it != std::end(cache))
-		return it->second;
-	return -1;
+	if (pos.x >= FLD_SIZE || pos.y >= FLD_SIZE || std::abs(vel.x) > VEL_SIZE || std::abs(vel.y) > VEL_SIZE)
+		return -1;
+	return precalc_memo[pos.y][pos.x][vel.y + VEL_SIZE][vel.x + VEL_SIZE];
 }
 
 bool find_neighbor_orbit(
-	const std::map<Cache,long>& memo
-	, const Vec& pos
-	, const Vec& vel
-	, long time
+	const Vec& pos_
+	, const Vec& vel_
+	, long time_
 	, Vec& res
+	, int step_
 ) {
-	for (long vy = -1; vy <= 1; ++vy) {
-		for (long vx = -1; vx <= 1; ++vx) {
-			const auto next = simulate(pos, Vec(vel.x - vx, vel.y - vy));
-			long step = get_orbit_step(memo, next.first, next.second);
+	// vx, vy, time, step, pos, vel
+	using State = std::tuple<long, long, long, long, Vec, Vec>;
+	std::queue<State> q;
 
-			if (step >= time) {
-				res.x = vx;
-				res.y = vy;
-				return true;
+	q.push(std::make_tuple(0, 0, time_, step_, pos_, vel_));
+	while(!q.empty()) {
+		auto state = q.front();
+		q.pop();
+
+		long vx, vy, time, step;
+		Vec pos, vel;
+		std::tie(vx, vy, time, step, pos, vel) = state;
+
+		if (step == 0) continue;
+
+		for (long n_vy = -1; n_vy <= 1; ++n_vy) {
+			for (long n_vx = -1; n_vx <= 1; ++n_vx) {
+				long first_vx = step == step_ ? n_vx : vx;
+				long first_vy = step == step_ ? n_vy : vy;
+
+				const auto next = simulate(pos, Vec(vel.x - n_vx, vel.y - n_vy));
+				long alive_turn = get_orbit_step(next.first, next.second);
+
+				if (alive_turn >= time) {
+					res.x = first_vx;
+					res.y = first_vy;
+					return true;
+				}
+
+				q.push(std::make_tuple(
+					first_vx, first_vy,
+					time-1, step-1, next.first, next.second
+				));
 			}
-		}	
+		}
 	}
 	return false;
 }
@@ -193,30 +222,63 @@ void defender(
 		-  2 * ship_params.x3;
 	res = ctx.start(ship_params);
 
-	std::map<Cache,long> memo;
-	precalc_orbit(res.static_info.universe_radius, res.static_info.galaxy_radius, memo);
+#ifdef LOCAL_DEBUG
+	auto t1 = std::chrono::steady_clock::now();
+#endif
+	precalc_orbit(res.static_info.universe_radius, res.static_info.galaxy_radius);
+#ifdef LOCAL_DEBUG
+	auto t2 = std::chrono::steady_clock::now();
+	std::cerr << "setup: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << std::endl;
+#endif
+
 	std::map<long, bool> on_orbit;
 
 	// Command loop
 	while(res.stage == galaxy::GameStage::RUNNING){
+		const long rest_time = res.static_info.time_limit - res.state.elapsed + 1;
 		res.dump(std::cerr);
 		galaxy::CommandListBuilder cmds;
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role != res.static_info.self_role){ continue; }
+
 
 			if (!on_orbit.count(ship.id)) on_orbit[ship.id] = false;
-			if (on_orbit[ship.id]) continue;
+			
+			if (rest_time <= get_orbit_step(ship.pos, ship.vel)) {
+				on_orbit[ship.id] = true;
+			}
+			
+			if (on_orbit[ship.id]){
+#ifdef LOCAL_DEBUG
+				std::cerr << "on orbit" << std::endl;
+#endif
+				continue;
+			}
 
-			long rest_time = res.static_info.time_limit - res.state.elapsed + 1;
 			Vec accel;
-			bool found = find_neighbor_orbit(memo, ship.pos, ship.vel, rest_time, accel);
-			if (!found) {
-				accel = compute_accel_far_away(
-					ship.pos, ship.vel, res.static_info.universe_radius);
+			int step = 3;
+			bool found = find_neighbor_orbit(ship.pos, ship.vel, rest_time, accel, step);
+
+			if (found) {
+#ifdef LOCAL_DEBUG
+				std::cerr << "found orbit" << std::endl;
+#endif
 			}
 			else {
-				on_orbit[ship.id] = true;
+				found = random_accel(ship.pos, ship.vel, res.static_info.universe_radius, res.static_info.galaxy_radius, accel);
+
+				if (!found) {
+					accel = compute_accel_far_away(
+						ship.pos, ship.vel, res.static_info.universe_radius);
+#ifdef LOCAL_DEBUG
+				std::cerr << "far_away accel" << std::endl;
+#endif
+				}
+				else {
+#ifdef LOCAL_DEBUG
+				std::cerr << "random accel" << std::endl;
+#endif
+				}
 			}
 
 			if(accel.x != 0 || accel.y != 0){
