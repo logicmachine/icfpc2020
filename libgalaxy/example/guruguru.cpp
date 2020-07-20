@@ -57,6 +57,48 @@ bool universe_check(const Vec& p0, const Vec& d0, int n, long r){
 	return true;
 }
 
+int dead_check(const Vec& p0, const Vec& d0, int n, long r){
+	Vec p = p0, d = d0;
+	for(int i = 0; i < n; ++i){
+		const auto next = simulate(p, d);
+		if(std::abs(next.first.x) <= r && std::abs(next.first.y) <= r){ return i; }
+		p = next.first;
+		d = next.second;
+	}
+	return n;
+}
+
+class SimulateN {
+public:
+  int rem_turn;
+  int r;
+  int dead_turn;
+  int enddepth;
+  std::vector<Vec> ans;
+  std::vector<Vec> accels;
+
+  SimulateN (int rem_turn, int r, int enddepth) : rem_turn(rem_turn), r(r), dead_turn(0), enddepth(enddepth) {}
+  void simulate_n(const Vec& pos, const Vec& vec, int depth) {
+    if (depth >= enddepth) {
+      int now_deadturn = dead_check(pos, vec, rem_turn, r);
+      if (dead_turn < now_deadturn) {
+        ans = accels;
+        dead_turn = now_deadturn;
+      }
+      return;
+    }
+    for (int dx = -1; dx <= 1; dx++) {
+      for (int dy = -1; dy <= 1; dy++) {
+        Vec acceled_vec(vec.x - dx, vec.y - dy);
+        auto pair = simulate(pos, acceled_vec);
+        accels.emplace_back(dx, dy);
+        simulate_n(pair.first, pair.second, depth+1);
+        accels.pop_back();
+      }
+    }
+  }
+};
+
 int main(int argc, char *argv[]){
 	if(argc < 3){
 		std::cerr << "Usage: " << argv[0] << " endpoint player_key" << std::endl;
@@ -105,8 +147,10 @@ int main(int argc, char *argv[]){
 	long counter = 0;
   long prev_attack_counter = 0;
   bool inKidou = false;
+  long kidou_idx = -1;
+  std::vector<Vec> kidou_plan_accel;
 
-  const long breaking_pos = 3;
+  const long breaking_pos = 4;
   const long kidou_vec = 5;
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
@@ -125,20 +169,40 @@ int main(int argc, char *argv[]){
       long r = res.static_info.galaxy_radius;
       long x = ship.pos.x;
       long y = ship.pos.y;
+      long rem_turn = res.static_info.time_limit - res.state.elapsed;
       galaxy::Vec gravAcc = gravity_force(ship.pos, res.static_info);
 
-      if (inKidou || abs(x) <= breaking_pos || abs(y) <= breaking_pos) { // 軌道に入った？
-        long long dx = 0, dy = 0;
-        inKidou = true;
-        if (abs(x) <= breaking_pos && abs(ship.vel.x) < kidou_vec) {
-          dx = ship.vel.x < 0 ? 1 : -1;
+      if (kidou_idx >= 0) {
+        if (kidou_idx < kidou_plan_accel.size()) {
+          cmds.accel(ship.id, kidou_plan_accel[kidou_idx++]);
         }
-        if (abs(y) <= breaking_pos && abs(ship.vel.y) < kidou_vec) {
-          dy = ship.vel.y < 0 ? 1 : -1;
+      }
+      else if (inKidou || abs(x) <= breaking_pos || abs(y) <= breaking_pos) {
+        // n手シミュレートする
+        SimulateN sim(rem_turn, r, 3);
+        sim.simulate_n(ship.pos, ship.vel, 0);
+        if (sim.dead_turn == rem_turn) {
+          // std::cerr << res.state.elapsed << ": ========================== In kidou ==========================" << std::endl;
+          // std::cerr << sim.ans.size() << " " << sim.ans[0].x << " " << sim.ans[0].y << std::endl;
+          kidou_plan_accel = sim.ans;
+          kidou_idx = 0;
+          cmds.accel(ship.id, kidou_plan_accel[kidou_idx++]);
         }
-        cmds.accel(ship.id, galaxy::Vec(dx, dy));
+        else {
+          // なんとなく動かす（惑星付近にいる時に端に逃げるように）
+          long long dx = 0, dy = 0;
+          inKidou = true;
+          if (abs(x) <= breaking_pos && abs(ship.vel.x) < kidou_vec) {
+            dx = ship.vel.x < 0 ? 1 : -1;
+          }
+          if (abs(y) <= breaking_pos && abs(ship.vel.y) < kidou_vec) {
+            dy = ship.vel.y < 0 ? 1 : -1;
+          }
+          cmds.accel(ship.id, galaxy::Vec(dx, dy));
+        }
       }
       else {
+        // X0 または Y0方向に低速度で近づける
         long distx = abs(x);
         long disty = abs(y);
 
