@@ -72,9 +72,9 @@ void defender(
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x1 =  0;
-	ship_params.x2 = 10;
-	ship_params.x3 =  1;
+	ship_params.x1 = 0;
+	ship_params.x2 = 6;
+	ship_params.x3 = 1;
 	ship_params.x0 =
 		  init_res.static_info.parameter_capacity
 		-  4 * ship_params.x1
@@ -208,7 +208,7 @@ void attacker(
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x1 = 96;
+	ship_params.x1 = 72;
 	ship_params.x2 =  8;
 	ship_params.x3 =  1;
 	ship_params.x0 =
