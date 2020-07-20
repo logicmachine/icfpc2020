@@ -1,5 +1,6 @@
 #include <tuple>
 #include <map>
+#include <cmath>
 
 #include "galaxy.hpp"
 
@@ -8,6 +9,7 @@
 // Settings
 //----------------------------------------------------------------------------
 const int UNIVERSE_CHECK_ITERATIONS = 15;
+const double RELATIVE_ANGLE_THRESHOLD = -0.25;
 
 
 //----------------------------------------------------------------------------
@@ -97,6 +99,12 @@ void defender(
 //----------------------------------------------------------------------------
 // Attacker
 //----------------------------------------------------------------------------
+double check_relative_angle(const Vec& a, const Vec& b){
+	if(a == b){ return true; }
+	const auto rad = std::atan2(static_cast<double>(b.y - a.y), static_cast<double>(b.x - a.x));
+	return std::cos(rad * 8.0) > RELATIVE_ANGLE_THRESHOLD;
+}
+
 class HistoricalPredictor {
 
 private:
@@ -218,7 +226,7 @@ void attacker(
 						if(!prediction.first){
 							prediction = inertial_predictor.predict(target);
 						}
-						if(prediction.first){
+						if(prediction.first && check_relative_angle(ship.pos, prediction.second)){
 							cmds.shoot(ship.id, prediction.second, ship.params.x1);
 						}
 					}
