@@ -25,8 +25,36 @@ galaxy::Vec gravity_force(const galaxy::Vec& ship_pos, const galaxy::StaticGameI
   }
 }
 
-void guruguru() {
-  
+using Vec = galaxy::Vec;
+
+Vec gravity(const Vec p){
+	const long abs_x = std::abs(p.x), abs_y = std::abs(p.y);
+	if(abs_x > abs_y){
+		return Vec(p.x > 0 ? -1 : 1, 0);
+	}else if(abs_x < abs_y){
+		return Vec(0, p.y > 0 ? -1 : 1);
+	}else{
+		return Vec(p.x > 0 ? -1 : 1, p.y > 0 ? -1 : 1);
+	}
+}
+
+std::pair<Vec, Vec> simulate(const Vec& p0, const Vec& d0){
+	const Vec g = gravity(p0);
+	const Vec d(d0.x + g.x, d0.y + g.y);
+	const Vec p(p0.x + d.x, p0.y + d.y);
+	return std::make_pair(p, d);
+}
+
+bool universe_check(const Vec& p0, const Vec& d0, int n, long r){
+	Vec p = p0, d = d0;
+	for(int i = 0; i < n; ++i){
+		const auto next = simulate(p, d);
+		if(std::abs(next.first.x) > r){ return false; }
+		if(std::abs(next.first.y) > r){ return false; }
+		p = next.first;
+		d = next.second;
+	}
+	return true;
 }
 
 int main(int argc, char *argv[]){
@@ -76,6 +104,10 @@ int main(int argc, char *argv[]){
 	// Command loop
 	long counter = 0;
   long prev_attack_counter = 0;
+  bool inKidou = false;
+
+  const long breaking_pos = 3;
+  const long kidou_vec = 5;
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
 
@@ -88,61 +120,55 @@ int main(int argc, char *argv[]){
       const auto& ship = sac.ship;
       if (ship.role != res.static_info.self_role) { eneId = i; continue; }
       else myId = i;
-      if(ship.params.x0 <= 50){ continue; }  // TODO
+      if (ship.params.x0 <= 50) { continue; }  // TODO
 
-      long distx = std::min(abs(ship.pos.x - res.static_info.galaxy_radius), abs(ship.pos.x + res.static_info.galaxy_radius));
-      long disty = std::min(abs(ship.pos.y - res.static_info.galaxy_radius), abs(ship.pos.y + res.static_info.galaxy_radius));
-      long dist = std::min(distx, disty);
       long r = res.static_info.galaxy_radius;
       long x = ship.pos.x;
       long y = ship.pos.y;
+      galaxy::Vec gravAcc = gravity_force(ship.pos, res.static_info);
 
-      long dx, dy;
-      bool iny, inx;
-      inx = (-r <= x && x <= r);
-      iny = (-r <= y && y <= r);
-
-      if (x <= -r && iny) dx = 1, dy = -1;
-      if (x <= -r && y <= r) dx = 1, dy = -1;
-
-      if (x <= -r && y >= r) dx = -1, dy = -1;
-      if (inx && y >= r) dx = -1, dy = -1;
-
-      if (x >= r && y >= r) dx = -1, dy = 1;
-      if (x >= r && iny) dx = -1, dy = 1;
-      
-      if (x >= r && y <= r) dx = 1, dy = 1;
-      if (inx && y <= r) dx = 1, dy = 1;
-
-      if (abs(ship.vel.x) > 4) {
-        dx = (ship.vel.x > 0 ? 1 : -1);
-      }
-      if (abs(x) > r * 5) {
-        dx = 0;
-      }
-      if (abs(ship.vel.y) > 4) {
-        dy = (ship.vel.y > 0 ? 1 : -1);
-      }
-      if (abs(y) > r * 5) {
-        dy = 0;
-      }
-
-      cmds.accel(ship.id, galaxy::Vec(dx, dy));
-    }
-    if (myId != -1) {
-        const auto& myship = res.state.ships[myId].ship;
-        if (eneId != -1 && myship.role == galaxy::PlayerRole::ATTACKER) {
-        const auto& opship = res.state.ships[eneId].ship;
-
-        double distEne = std::sqrt(double((myship.pos.x - opship.pos.x) * (myship.pos.x - opship.pos.x) + (myship.pos.y - opship.pos.y) * (myship.pos.y - opship.pos.y)));
-        if (distEne < 160 && counter - prev_attack_counter > 15) {
-          attack = true;
-          cmds.shoot(myship.id, opship.pos, myship.params.x1);
-          prev_attack_counter = counter;
+      if (inKidou || abs(x) <= breaking_pos || abs(y) <= breaking_pos) { // 軌道に入った？
+        long long dx = 0, dy = 0;
+        inKidou = true;
+        if (abs(x) <= breaking_pos && abs(ship.vel.x) < kidou_vec) {
+          dx = ship.vel.x < 0 ? 1 : -1;
         }
+        if (abs(y) <= breaking_pos && abs(ship.vel.y) < kidou_vec) {
+          dy = ship.vel.y < 0 ? 1 : -1;
+        }
+        cmds.accel(ship.id, galaxy::Vec(dx, dy));
+      }
+      else {
+        long distx = abs(x);
+        long disty = abs(y);
+
+        long addx = 0, addy = 0;
+        bool toY0 = false;
+        const long accel_limit = 3;
+
+        if (disty <= distx) toY0 = true;
+        if (toY0) {
+          if (x != 0) addx = (x < 0 ? 1 : -1);
+          if (y != 0) addy = (y < 0 ? -1 : 1);
+        }
+        else {
+          if (x != 0) addx = (x < 0 ? -1 : 1);
+          if (y != 0) addy = (y < 0 ? 1 : -1);
+        }
+        long nextvx, nextvy;
+        nextvx = ship.vel.x - addx + gravAcc.x;
+        nextvy = ship.vel.y - addy + gravAcc.y;
+        if (toY0) {
+          if (abs(y) <= 3 && abs(nextvy) > 0) addy = -addy;
+          else if (abs(nextvy) >= accel_limit) addy = 0; // 進行方向に加速しすぎない
+        }
+        else {
+          if (abs(x) <= 3 && abs(nextvx) > 0) addx = -addx;
+          if (abs(nextvx) >= accel_limit) addx = 0;
+        }
+        cmds.accel(ship.id, galaxy::Vec(addx, addy));
       }
     }
-    
 		res = ctx.command(cmds);
 		++counter;
 	}
