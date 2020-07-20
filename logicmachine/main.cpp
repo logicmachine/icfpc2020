@@ -208,8 +208,8 @@ void attacker(
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x1 = 64;
-	ship_params.x2 = 10;
+	ship_params.x1 = 96;
+	ship_params.x2 =  8;
 	ship_params.x3 =  1;
 	ship_params.x0 =
 		  init_res.static_info.parameter_capacity
