@@ -1,5 +1,6 @@
 #include <tuple>
 #include <map>
+#include <random>
 #include <cmath>
 
 #include "galaxy.hpp"
@@ -69,9 +70,9 @@ void defender(
 
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x1 =  0;
-	ship_params.x2 = 10;
-	ship_params.x3 =  1;
+	ship_params.x1 = 0;
+	ship_params.x2 = 8;
+	ship_params.x3 = 1;
 	ship_params.x0 =
 		  init_res.static_info.parameter_capacity
 		-  4 * ship_params.x1
@@ -100,13 +101,13 @@ void defender(
 
 
 //----------------------------------------------------------------------------
-// Attacker
+// Attacker (Simple-Shooter)
 //----------------------------------------------------------------------------
-double check_relative_angle(const Vec& a, const Vec& b){
+long check_relative_angle(const Vec& a, const Vec& b){
 	if(a == b){ return true; }
 	const auto dx = std::abs(b.x - a.x);
 	const auto dy = std::abs(b.y - a.y);
-	return std::min(std::min(dx, dy), std::abs(dx - dy)) < RELATIVE_ANGLE_THRESHOLD;
+	return std::min(std::min(dx, dy), std::abs(dx - dy));
 }
 
 class HistoricalPredictor {
@@ -195,7 +196,7 @@ void attacker(
 	// Start
 	galaxy::ShipParams ship_params;
 	ship_params.x1 = 64;
-	ship_params.x2 = 10;
+	ship_params.x2 =  8;
 	ship_params.x3 =  1;
 	ship_params.x0 =
 		  init_res.static_info.parameter_capacity
@@ -207,7 +208,7 @@ void attacker(
 	// Command loop
 	const long bound_radius = std::max(
 		res.static_info.universe_radius / 3,
-		res.static_info.galaxy_radius + 16);
+		res.static_info.galaxy_radius + 32);
 
 	HistoricalPredictor historical_predictor;
 	InertialPredictor inertial_predictor;
@@ -217,31 +218,42 @@ void attacker(
 		galaxy::CommandListBuilder cmds;
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role == res.static_info.self_role){
+			if(ship.role == res.static_info.self_role && ship.params.x3 != 0){
 				// Acceleration
 				const auto accel = compute_accel(
 					ship.pos, ship.vel, bound_radius, res.static_info.galaxy_radius);
 				if(accel.x != 0 || accel.y != 0){ cmds.accel(ship.id, accel); }
 				// Shooting
 				if(ship.x5 > 0){ continue; } // TODO
+				const auto next_pos = simulate(
+					ship.pos, Vec(ship.vel.x + accel.x, ship.vel.y + accel.y)).first;
+				long best_score = RELATIVE_ANGLE_THRESHOLD;
+				Vec  best_target;
 				for(const auto& target_sac : res.state.ships){
 					const auto& target = target_sac.ship;
-					if(target.role != res.static_info.self_role){
+					if(target.role != res.static_info.self_role && target.params.x3 != 0){
 						std::pair<bool, Vec> prediction;
 						prediction = historical_predictor.predict(target);
 						if(!prediction.first){
 							prediction = inertial_predictor.predict(target);
 						}
-						if(prediction.first && check_relative_angle(ship.pos, prediction.second)){
-							cmds.shoot(ship.id, prediction.second, ship.params.x1);
+						if(prediction.first){
+							const auto score = check_relative_angle(next_pos, prediction.second);
+							if(score < best_score){
+								best_score = score;
+								best_target = prediction.second;
+							}
 						}
 					}
+				}
+				if(best_score < RELATIVE_ANGLE_THRESHOLD){
+					cmds.shoot(ship.id, best_target, ship.params.x1);
 				}
 			}
 		}
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role != res.static_info.self_role){
+			if(ship.role != res.static_info.self_role && ship.params.x3 != 0){
 				historical_predictor.update(ship);
 				inertial_predictor.update(ship);
 			}
