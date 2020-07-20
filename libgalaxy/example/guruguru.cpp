@@ -2,8 +2,7 @@
 #include <cmath>
 #include <map>
 
-galaxy::Vec gravity_force(const galaxy::Vec& ship_pos, const galaxy::StaticGameInfo& info) {
-  long r = info.galaxy_radius;
+galaxy::Vec gravity_force(const galaxy::Vec& ship_pos, const long r) {
   long lx = -r, rx = r, uy = r, by = -r;
   long x = ship_pos.x, y = ship_pos.y;
   long cand_fx = (x < 0 ? 1 : -1);
@@ -39,29 +38,18 @@ Vec gravity(const Vec p){
 	}
 }
 
-std::pair<Vec, Vec> simulate(const Vec& p0, const Vec& d0){
+std::pair<Vec, Vec> simulate(const Vec& p0, const Vec& d0, const long r){
 	const Vec g = gravity(p0);
 	const Vec d(d0.x + g.x, d0.y + g.y);
 	const Vec p(p0.x + d.x, p0.y + d.y);
+  (void)r;
 	return std::make_pair(p, d);
-}
-
-bool universe_check(const Vec& p0, const Vec& d0, int n, long r){
-	Vec p = p0, d = d0;
-	for(int i = 0; i < n; ++i){
-		const auto next = simulate(p, d);
-		if(std::abs(next.first.x) > r){ return false; }
-		if(std::abs(next.first.y) > r){ return false; }
-		p = next.first;
-		d = next.second;
-	}
-	return true;
 }
 
 int dead_check(const Vec& p0, const Vec& d0, int n, long r, long fieldr){
 	Vec p = p0, d = d0;
 	for(int i = 0; i < n; ++i){
-		const auto next = simulate(p, d);
+		const auto next = simulate(p, d, r);
 		if (std::abs(next.first.x) <= r && std::abs(next.first.y) <= r) return i;
     if (std::abs(next.first.x) >= fieldr) return i;
     if (std::abs(next.first.y) >= fieldr) return i;
@@ -95,7 +83,7 @@ public:
     for (int dx = -1; dx <= 1; dx++) {
       for (int dy = -1; dy <= 1; dy++) {
         Vec acceled_vec(vec.x - dx, vec.y - dy);
-        auto pair = simulate(pos, acceled_vec);
+        auto pair = simulate(pos, acceled_vec, r);
         accels.emplace_back(dx, dy);
         simulate_n(pair.first, pair.second, depth+1);
         accels.pop_back();
@@ -104,15 +92,15 @@ public:
   }
 };
 
-#define FORK_INTERVAL 10
+#define FORK_INTERVAL 1
 #define FORK_MIN_DIST 16
 class ShipKidouState {
 public:
   bool is_kidou = false;
-  bool will_kidou = false;
   long during_kidou_idx = -1;
   long shipId = -1;
   long prev_fork_counter = -1;
+  bool should_zurasi = false;
   std::vector<Vec> kidou_plan_accel;
 
   bool should_fork(long counter) {
@@ -123,15 +111,15 @@ public:
   }
   void fork(long counter) {
     kidou_plan_accel = std::vector<Vec>();
-    during_kidou_idx = -1;
-    is_kidou = false;
     prev_fork_counter = counter;
+    should_zurasi = true;
   }
 };
 
 // X0 または Y0方向に低速度で近づける
 Vec toX0orY0(const galaxy::ShipState& ship, const galaxy::StaticGameInfo& static_info) {
-  galaxy::Vec grav_acc = gravity_force(ship.pos, static_info);
+  galaxy::Vec grav_acc = gravity(ship.pos);
+  (void)static_info;
   long x = ship.pos.x;
   long y = ship.pos.y;
   long distx = abs(x);
@@ -248,7 +236,6 @@ int main(int argc, char *argv[]){
       ShipKidouState& ship_state = ship_state_dic[i];
       auto& during_kidou_idx = ship_state.during_kidou_idx;
       auto& kidou_plan_accel = ship_state.kidou_plan_accel;
-      auto& will_kidou = ship_state.will_kidou;
       auto& is_kidou = ship_state.is_kidou;
 
       long galaxy_radius = res.static_info.galaxy_radius;
@@ -256,33 +243,42 @@ int main(int argc, char *argv[]){
       long rem_turn = res.static_info.time_limit - res.state.elapsed;
       long now_time = res.state.elapsed;
 
+      std::cerr << "shoud_zurasi: " << ship_state.should_zurasi << std::endl;
       std::cerr << "is_kidou: " << is_kidou << std::endl;
-      std::cerr << "will_kidou: " << will_kidou << std::endl;
       std::cerr << "during_kidou_idx: " << during_kidou_idx << std::endl;
-
-      if (during_kidou_idx >= 0) { //後数回加速すれば軌道にのる
+      
+      if (ship_state.should_zurasi) {
+        Vec zure;
+        Vec grad = gravity(ship.pos);
+        zure.x = (ship.vel.x > 0 ? -1 : 1);
+        zure.y = (ship.vel.y > 0 ? -1 : 1);
+        SimulateN sim(rem_turn - 1, galaxy_radius, field_radius, 3);
+        sim.simulate_n(Vec(ship.pos.x + ship.vel.x, ship.pos.y + ship.vel.y), Vec(ship.vel.x - zure.x + grad.x, ship.vel.y - zure.y + grad.y), 0); //速度は逆に増える
+        // 戻ってこれるなら行うずらしを実行
+        if (sim.dead_turn == rem_turn - 1) {
+          cmds.accel(ship.id, zure);
+          ship_state.should_zurasi = false;
+          ship_state.is_kidou = false;
+          ship_state.during_kidou_idx = 0;
+          ship_state.kidou_plan_accel = sim.ans;
+        }
+      }
+      else if (during_kidou_idx >= 0) { //後数回加速すれば軌道にのる
         if (during_kidou_idx < (int)kidou_plan_accel.size()) {
           cmds.accel(ship.id, kidou_plan_accel[during_kidou_idx++]);
         }
         else {
           is_kidou = true; // 完全に軌道に乗った
           // 分裂
-          long mindist = std::min(abs(ship.pos.x), abs(ship.pos.y));
-          if (ship.params.x3 > 1 && ship_state.should_fork(now_time) && mindist < FORK_MIN_DIST) {
+          if (ship.params.x3 > 1 && ship_state.should_fork(now_time)) {
             galaxy::ShipParams param;
             param.x0 = 0; param.x1 = 0; param.x2 = 0; param.x3 = 1;
-            
             cmds.fork(ship.id, param);
             ship_state.fork(now_time);
-            
-            Vec zure;
-            zure.x = (ship.vel.x > 0 ? -1 : 1);
-            zure.y = (ship.vel.y > 0 ? -1 : 1);
-            cmds.accel(ship.id, zure); // 星から離れながら軌道からずれる上手く行かない→重力の逆に1回噴くダメ→速度と同じ方向
           }
         }
       }
-      else if (will_kidou || abs(ship.pos.x) <= near_galaxy_dist || abs(ship.pos.y) <= near_galaxy_dist) {
+      else {
         // n手シミュレートする
         SimulateN sim(rem_turn, galaxy_radius, field_radius, 5);
         sim.simulate_n(ship.pos, ship.vel, 0);
@@ -292,14 +288,12 @@ int main(int argc, char *argv[]){
           cmds.accel(ship.id, kidou_plan_accel[during_kidou_idx++]);
         }
         else {
-          // なんとなく動かす（惑星付近にいる時に端に逃げるように）
-          cmds.accel(ship.id, escape_from_galaxy(ship, near_galaxy_dist));
+          // 良さげな初期位置を作る(非常に要らない気がする)
+          // X0 または Y0方向に低速度で近づける
+          cmds.accel(ship.id, toX0orY0(ship, res.static_info));
+          // if ( std::max(abs(ship.vel.x), abs(ship.vel.y)) >= 5) cmds.accel(ship.id, sim.ans[0]);
+          // else 
         }
-        will_kidou = true;
-      }
-      else { // 良さげな初期位置を作る(非常に要らない気がする)
-        // X0 または Y0方向に低速度で近づける
-        cmds.accel(ship.id, toX0orY0(ship, res.static_info));
       }
     }
 		res = ctx.command(cmds);
