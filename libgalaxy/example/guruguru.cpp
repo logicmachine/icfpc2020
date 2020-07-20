@@ -58,11 +58,13 @@ bool universe_check(const Vec& p0, const Vec& d0, int n, long r){
 	return true;
 }
 
-int dead_check(const Vec& p0, const Vec& d0, int n, long r){
+int dead_check(const Vec& p0, const Vec& d0, int n, long r, long fieldr){
 	Vec p = p0, d = d0;
 	for(int i = 0; i < n; ++i){
 		const auto next = simulate(p, d);
-		if(std::abs(next.first.x) <= r && std::abs(next.first.y) <= r){ return i; }
+		if (std::abs(next.first.x) <= r && std::abs(next.first.y) <= r) return i;
+    if (std::abs(next.first.x) >= fieldr) return i;
+    if (std::abs(next.first.y) >= fieldr) return i;
 		p = next.first;
 		d = next.second;
 	}
@@ -72,16 +74,18 @@ int dead_check(const Vec& p0, const Vec& d0, int n, long r){
 class SimulateN {
 public:
   int rem_turn;
-  int r;
+  long r;
+  long fieldr;
   int dead_turn;
   int enddepth;
   std::vector<Vec> ans;
   std::vector<Vec> accels;
 
-  SimulateN (int rem_turn, int r, int enddepth) : rem_turn(rem_turn), r(r), dead_turn(0), enddepth(enddepth) {}
+  SimulateN (int rem_turn, long r, long fieldr, int enddepth) : rem_turn(rem_turn), r(r), fieldr(fieldr), dead_turn(0), enddepth(enddepth) {}
+
   void simulate_n(const Vec& pos, const Vec& vec, int depth) {
     if (depth >= enddepth) {
-      int now_deadturn = dead_check(pos, vec, rem_turn, r);
+      int now_deadturn = dead_check(pos, vec, rem_turn, r, fieldr);
       if (dead_turn < now_deadturn) {
         ans = accels;
         dead_turn = now_deadturn;
@@ -100,12 +104,29 @@ public:
   }
 };
 
+#define FORK_INTERVAL 10
+#define FORK_MIN_DIST 16
 class ShipKidouState {
 public:
-  bool is_on_kidou = false;
-  long kidou_idx = -1;
+  bool is_kidou = false;
+  bool will_kidou = false;
+  long during_kidou_idx = -1;
   long shipId = -1;
+  long prev_fork_counter = -1;
   std::vector<Vec> kidou_plan_accel;
+
+  bool should_fork(long counter) {
+    if (counter - prev_fork_counter > FORK_INTERVAL) {
+      return true;
+    }
+    return false;
+  }
+  void fork(long counter) {
+    kidou_plan_accel = std::vector<Vec>();
+    during_kidou_idx = -1;
+    is_kidou = false;
+    prev_fork_counter = counter;
+  }
 };
 
 // X0 または Y0方向に低速度で近づける
@@ -154,6 +175,11 @@ Vec escape_from_galaxy(const galaxy::ShipState& ship, const long near_galaxy_dis
     dy = ship.vel.y < 0 ? 1 : -1;
   }
   return Vec(dx, dy);
+}
+
+// 星から離れる加速方向
+Vec accel_outside_galaxy(const Vec& p) {
+  return Vec(p.x >= 0 ? -1 : 1, p.y >= 0 ? -1 : 1);
 }
 
 int main(int argc, char *argv[]){
@@ -220,34 +246,58 @@ int main(int argc, char *argv[]){
         ship_state_dic[i] = ShipKidouState();
       }
       ShipKidouState& ship_state = ship_state_dic[i];
-      long& kidou_idx = ship_state.kidou_idx;
+      auto& during_kidou_idx = ship_state.during_kidou_idx;
       auto& kidou_plan_accel = ship_state.kidou_plan_accel;
-      auto& is_on_kidou = ship_state.is_on_kidou;
+      auto& will_kidou = ship_state.will_kidou;
+      auto& is_kidou = ship_state.is_kidou;
 
       long galaxy_radius = res.static_info.galaxy_radius;
+      long field_radius = res.static_info.universe_radius;
       long rem_turn = res.static_info.time_limit - res.state.elapsed;
+      long now_time = res.state.elapsed;
 
-      if (kidou_idx >= 0) {
-        if (kidou_idx < (int)kidou_plan_accel.size()) {
-          cmds.accel(ship.id, kidou_plan_accel[kidou_idx++]);
+      std::cerr << "is_kidou: " << is_kidou << std::endl;
+      std::cerr << "will_kidou: " << will_kidou << std::endl;
+      std::cerr << "during_kidou_idx: " << during_kidou_idx << std::endl;
+
+      if (during_kidou_idx >= 0) { //後数回加速すれば軌道にのる
+        if (during_kidou_idx < (int)kidou_plan_accel.size()) {
+          cmds.accel(ship.id, kidou_plan_accel[during_kidou_idx++]);
+        }
+        else {
+          is_kidou = true; // 完全に軌道に乗った
+          // 分裂
+          long mindist = std::min(abs(ship.pos.x), abs(ship.pos.y));
+          if (ship.params.x3 > 1 && ship_state.should_fork(now_time) && mindist < FORK_MIN_DIST) {
+            galaxy::ShipParams param;
+            param.x0 = 0; param.x1 = 0; param.x2 = 0; param.x3 = 1;
+            
+            cmds.fork(ship.id, param);
+            ship_state.fork(now_time);
+            
+            Vec zure;
+            zure.x = (ship.vel.x > 0 ? -1 : 1);
+            zure.y = (ship.vel.y > 0 ? -1 : 1);
+            cmds.accel(ship.id, zure); // 星から離れながら軌道からずれる上手く行かない→重力の逆に1回噴くダメ→速度と同じ方向
+          }
         }
       }
-      else if (is_on_kidou || abs(ship.pos.x) <= near_galaxy_dist || abs(ship.pos.y) <= near_galaxy_dist) {
+      else if (will_kidou || abs(ship.pos.x) <= near_galaxy_dist || abs(ship.pos.y) <= near_galaxy_dist) {
         // n手シミュレートする
-        SimulateN sim(rem_turn, galaxy_radius, 3);
+        SimulateN sim(rem_turn, galaxy_radius, field_radius, 5);
         sim.simulate_n(ship.pos, ship.vel, 0);
-        if (sim.dead_turn == rem_turn) { // 死ぬまでのターンが返ってくるので最後まで活きていたら
+        if (sim.dead_turn == rem_turn) { // 死ぬまでのターンが返ってくるので最後まで活きていたら軌道に乗る
           kidou_plan_accel = sim.ans;
-          kidou_idx = 0;
-          cmds.accel(ship.id, kidou_plan_accel[kidou_idx++]);
+          during_kidou_idx = 0;
+          cmds.accel(ship.id, kidou_plan_accel[during_kidou_idx++]);
         }
         else {
           // なんとなく動かす（惑星付近にいる時に端に逃げるように）
           cmds.accel(ship.id, escape_from_galaxy(ship, near_galaxy_dist));
-          is_on_kidou = true;
         }
+        will_kidou = true;
       }
-      else {
+      else { // 良さげな初期位置を作る(非常に要らない気がする)
         // X0 または Y0方向に低速度で近づける
         cmds.accel(ship.id, toX0orY0(ship, res.static_info));
       }
