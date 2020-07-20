@@ -160,11 +160,11 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 	ship_params.x2 = 10;
 	ship_params.x3 = 10;
 
-	ship_params.x0 = 512;
-		//   res.static_info.parameter_capacity
-		// -  4 * ship_params.x1
-		// - 12 * ship_params.x2
-		// -  2 * ship_params.x3;
+	ship_params.x0 = 
+		  res.static_info.parameter_capacity
+		-  4 * ship_params.x1
+		- 12 * ship_params.x2
+		-  2 * ship_params.x3;
 	res = ctx.start(ship_params);
 
 	int base_shipid = 0;
