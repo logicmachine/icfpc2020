@@ -193,7 +193,9 @@ void attacker(
 	res = ctx.start(ship_params);
 
 	// Command loop
-	const long bound_radius = res.static_info.universe_radius / 2;
+	const long bound_radius = std::max(
+		res.static_info.universe_radius / 3,
+		res.static_info.galaxy_radius + 16);
 	HistoricalPredictor historical_predictor;
 	InertialPredictor inertial_predictor;
 
