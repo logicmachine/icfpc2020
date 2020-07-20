@@ -191,7 +191,7 @@ void defender(
 	galaxy::ShipParams ship_params;
 	ship_params.x1 =  0;
 	ship_params.x2 = 10;
-	ship_params.x3 =  1;
+	ship_params.x3 =  70;
 	ship_params.x0 =
 		  init_res.static_info.parameter_capacity
 		-  4 * ship_params.x1
@@ -208,7 +208,7 @@ void defender(
 	std::cerr << "setup: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << std::endl;
 #endif
 
-	std::map<long, bool> on_orbit;
+	std::map<long, int> on_orbit;
 
 	// Command loop
 	while(res.stage == galaxy::GameStage::RUNNING){
@@ -219,44 +219,53 @@ void defender(
 			const auto& ship = sac.ship;
 
 
-			if (!on_orbit.count(ship.id)) on_orbit[ship.id] = false;
+			if (!on_orbit.count(ship.id)) on_orbit[ship.id] = 0;
 			
 			if (rest_time <= get_orbit_step(ship.pos, ship.vel, res.static_info.universe_radius, res.static_info.galaxy_radius)) {
-				on_orbit[ship.id] = true;
+				if (on_orbit[ship.id] >= 0)
+					on_orbit[ship.id] = 1;
 			}
 			
-			if (on_orbit[ship.id]){
-#ifdef LOCAL_DEBUG
-				std::cerr << "on orbit" << std::endl;
-#endif
+			if (on_orbit[ship.id] == 1){
+				if (ship.params.x3 > 1) {
+					galaxy::ShipParams params;
+					params.x0 = 0;
+					params.x1 = 0;
+					params.x2 = 0;
+					params.x3 = 1;
 
+					cmds.fork(ship.id, params);
+					on_orbit[ship.id] = -5;
+				}
 
 				continue;
 			}
 
 			Vec accel;
-			int step = 3;
-			bool found = find_neighbor_orbit(ship.pos, ship.vel, rest_time, accel, step, res.static_info.universe_radius, res.static_info.galaxy_radius);
 
-			if (found) {
-#ifdef LOCAL_DEBUG
-				std::cerr << "found orbit" << std::endl;
-#endif
-			}
-			else {
-				found = random_accel(ship.pos, ship.vel, res.static_info.universe_radius, res.static_info.galaxy_radius, accel);
+			if (on_orbit[ship.id] < 0) {
+				++on_orbit[ship.id];
+
+				bool found = random_accel(ship.pos, ship.vel, res.static_info.universe_radius, res.static_info.galaxy_radius, accel);
 
 				if (!found) {
 					accel = compute_accel_far_away(
 						ship.pos, ship.vel, res.static_info.universe_radius);
-#ifdef LOCAL_DEBUG
-				std::cerr << "far_away accel" << std::endl;
-#endif
+				}
+			}
+			else {
+				int step = 3;
+				bool found = find_neighbor_orbit(ship.pos, ship.vel, rest_time, accel, step, res.static_info.universe_radius, res.static_info.galaxy_radius);
+
+				if (found) {
 				}
 				else {
-#ifdef LOCAL_DEBUG
-				std::cerr << "random accel" << std::endl;
-#endif
+					found = random_accel(ship.pos, ship.vel, res.static_info.universe_radius, res.static_info.galaxy_radius, accel);
+
+					if (!found) {
+						accel = compute_accel_far_away(
+							ship.pos, ship.vel, res.static_info.universe_radius);
+					}
 				}
 			}
 
