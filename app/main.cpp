@@ -2,155 +2,176 @@
 
 #include <limits>
 #include <cmath>
+#include <queue>
+#include <tuple>
+#include <map>
 
-struct Rect {
-	galaxy::Vec lower;
-	galaxy::Vec upper;
+namespace galaxy {
 
-	Rect(){}
-
-	Rect(const galaxy::Vec &lower, const galaxy::Vec &upper) {
-		this->lower = lower;
-		this->upper = upper;
-	}
-};
-
-struct Line {
-	galaxy::Vec p1;
-	galaxy::Vec p2;
-
-	Line(const galaxy::Vec &p1, const galaxy::Vec &p2) {
-		this->p1 = p1;
-		this->p2 = p2;
-	}
-};
-
-bool intersect(const Line &l1, const Line &l2) {
-
-	const auto ax = l1.p1.x;
-	const auto ay = l1.p1.y;
-	const auto bx = l1.p2.x;
-	const auto by = l1.p2.y;
-	const auto cx = l2.p1.x;
-	const auto cy = l2.p1.y;
-	const auto dx = l2.p2.x;
-	const auto dy = l2.p2.y;
-
-	const auto ta = (cx - dx) * (ay - cy) + (cy - dy) * (cx - ax);
-	const auto tb = (cx - dx) * (by - cy) + (cy - dy) * (cx - bx);
-	const auto tc = (ax - bx) * (cy - ay) + (ay - by) * (ax - cx);
-	const auto td = (ax - bx) * (dy - ay) + (ay - by) * (ax - dx);
-
-    return tc * td < 0 && ta * tb < 0;
+Vec operator+(const Vec &v1, const Vec &v2) {
+	return Vec(v1.x + v2.x, v1.y + v2.y);
 }
 
-bool visible(const galaxy::Vec &self, const galaxy::Vec &opponent, const Rect &aubit) {
+Vec operator-(const Vec &v1, const Vec &v2) {
+	return Vec(v1.x - v2.x, v1.y - v2.y);
+}
+bool operator<(const Vec &v1, const Vec &v2) {
+	return v1.x != v2.x ? v1.x < v2.x : v1.y < v2.y;
+}
 
-	const auto player_line = Line(self, opponent);
+}
 
-	const galaxy::Vec ul(aubit.lower.x, aubit.upper.y);
-	const galaxy::Vec ur(aubit.upper.x, aubit.upper.y);
-	const galaxy::Vec dr(aubit.upper.x, aubit.upper.y);
-	const galaxy::Vec dl(aubit.lower.x, aubit.lower.y);
-	
-	const std::vector<Line> rect_lines = {
-		Line(ul, ur), 
-		Line(ur, dr),
-		Line(dr, dl), 
-		Line(dl, ul)	
-	};
+//----------------------------------------------------------------------------
+// Settings
+//----------------------------------------------------------------------------
+const int UNIVERSE_CHECK_ITERATIONS = 15;
+const int RELATIVE_ANGLE_THRESHOLD = 4;
 
-	for (auto line : rect_lines) {
-		if (intersect(player_line, line)) {
+//----------------------------------------------------------------------------
+// Utilities
+//----------------------------------------------------------------------------
+using Vec = galaxy::Vec;
+
+Vec gravity(const Vec p){
+	const long abs_x = std::abs(p.x), abs_y = std::abs(p.y);
+	if(abs_x > abs_y){
+		return Vec(p.x > 0 ? -1 : 1, 0);
+	}else if(abs_x < abs_y){
+		return Vec(0, p.y > 0 ? -1 : 1);
+	}else{
+		return Vec(p.x > 0 ? -1 : 1, p.y > 0 ? -1 : 1);
+	}
+}
+
+std::pair<Vec, Vec> simulate(const Vec& p0, const Vec& d0){
+	const Vec g = gravity(p0);
+	const Vec d(d0.x + g.x, d0.y + g.y);
+	const Vec p(p0.x + d.x, p0.y + d.y);
+	return std::make_pair(p, d);
+}
+
+bool universe_check(const Vec& p0, const Vec& d0, int n, long ur, long gr){
+	Vec p = p0, d = d0;
+	for(int i = 0; i < n; ++i){
+		const auto next = simulate(p, d);
+		if(std::abs(next.first.x) > ur){ return false; }
+		if(std::abs(next.first.y) > ur){ return false; }
+		if(std::abs(next.first.x) <= gr && std::abs(next.first.y) <= gr){ break; }
+		p = next.first;
+		d = next.second;
+	}
+	return true;
+}
+
+Vec compute_accel(const Vec& p, const Vec& d, long ur, long gr){
+	const Vec dd(p.x >= 0 ? -1 : 1, p.y >= 0 ? -1 : 1);
+	const auto next = simulate(p, Vec(d.x - dd.x, d.y - dd.y));
+	if(universe_check(next.first, next.second, UNIVERSE_CHECK_ITERATIONS, ur, gr)){
+		return dd;
+	}else{
+		return Vec();
+	}
+}
+
+
+bool alive(Vec pos, Vec vel, int turn, int rad) {
+
+	for (int i = 0; i < turn; i++) {
+
+		std::tie(pos, vel) = simulate(pos, vel);
+
+		if (std::abs(pos.y) <= rad && std::abs(pos.x) <= rad) {
 			return false;
 		}
 	}
 	return true;
 }
 
-galaxy::Vec accel(const galaxy::Vec &ship, const galaxy::Vec &aubit_lower, const galaxy::Vec &aubit_upper) {
+using State = std::tuple<int, int, Vec, Vec>;
 
-	const int cand_ax = ship.x < aubit_lower.x ? 1 : -1;
-	const int cand_ay = ship.y < aubit_lower.y ? 1 : -1;
 
-	if (aubit_lower.y <= ship.y && ship.y <= aubit_upper.y) {
-		return galaxy::Vec(cand_ax, 0);
-	}
-	if (aubit_lower.x <= ship.x && ship.x <= aubit_upper.x) {
-		return galaxy::Vec(0, cand_ay);
-	}
+std::vector<Vec> search_alive(const Vec init_pos, const Vec init_vel, int rad, int max_depth) {
+	
+	auto ss = std::make_tuple(0, -1, init_pos, init_vel);
 
-	const auto dx = std::min(abs(ship.x - aubit_lower.x), abs(ship.x - aubit_upper.x));
-	const auto dy = std::min(abs(ship.y - aubit_lower.y), abs(ship.y - aubit_upper.y));
+	std::queue<State> que;
+	que.push(ss);
 
-	if (dx > dy) {
-		return galaxy::Vec(cand_ax, 0);
-	} else {
-		return galaxy::Vec(0, cand_ay);
-	}
-	// TODO: dx == dy?
-}
+	const std::array<Vec, 8> as = {
+		Vec(-1, 1),
+		Vec(-1, 0),
+		Vec(-1, -1),
+		Vec(0, -1),
+		Vec(1, -1),
+		Vec(1, 0),
+		Vec(1, 1),
+		Vec(0, 1)
+	};
 
-galaxy::Vec next_dir(const galaxy::Vec &ship_pos, const galaxy::Vec &ship_vel) {
+	std::map<State, State> prev;
 
-	// 中心を (0, 0) と仮定して、直行する位置で、現在の vel に近い方向へ向かう
+	while (!que.empty()) {
+		
+		int depth, pai;
+		Vec pos, vel;
+		auto cs = que.front();
+		std::tie(depth, pai, pos, vel) = cs;
+		que.pop();
 
-	// TODO: 的に近づく AI を書く
+		for (int ai = 0; ai < 8; ai++) {
+			auto a = as[ai];
 
-	galaxy::Vec ret;
-	double ip = std::numeric_limits<int>::max();
-	int index = 0;
+			auto nvel = vel + gravity(pos) + a;
+			auto npos = pos + nvel;
 
-	const int dy[8] = {-1, -1, -1, 0, 1, 1, 1, 0};
-	const int dx[8] = {-1, 0, 1, 1, 1, 0, -1, -1}; 
+			auto ns = std::make_tuple(depth + 1, ai, npos, nvel);
+			prev[ns] = cs;
 
-	for (int i = 0; i < 8; i++) {
-		const double norm = std::sqrt(dy[i] * dy[i] + dx[i] * dx[i]);
-		const auto cur_ip = std::abs(ship_pos.x * dx[i]  + ship_pos.y * dy[i]) / norm;
-		if (ip > cur_ip) {
-			ip = cur_ip;
-			index = i;
+			if (alive(npos, nvel, 256, rad)) {
+
+				std::vector<Vec> recur;
+				recur.push_back(as[ai]);
+
+				while (std::get<1>(cs) != -1) {
+					auto ps = prev[cs];
+					recur.push_back(as[std::get<1>(ps)]);
+					cs = ps;
+				}
+				return recur;
+			}
 		}
 	}
-	
-	const int op_index = (index + 4) % 8;
-
-	const int c1 = ship_vel.x * dx[index] + ship_vel.y * dy[index];
-	const int c2 = ship_vel.x * dx[op_index] + ship_vel.y * dy[op_index];
-
-	return c1 > c2 ? galaxy::Vec(dx[index], dy[index]) : galaxy::Vec(dx[op_index], dy[op_index]);	
+	return std::vector<Vec>();
 }
 
-galaxy::Vec next_position(const galaxy::Vec &ship_pos, const galaxy::Vec &ship_vel, const galaxy::Vec &aubit_lower, 
-		const galaxy::Vec &aubit_upper) {
-	const auto a = accel(ship_pos, aubit_lower, aubit_upper);
-	return galaxy::Vec (
-		ship_pos.x + ship_vel.x + a.x,
-		ship_pos.y + ship_vel.y + a.y
-	);
-}
+enum class MoveState {
+	PREPARE_REVOLUTION,
+	WAIT,
+};
+
 
 void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 
 	const auto self_role = res.static_info.self_role;
 
+	MoveState move_state = MoveState::PREPARE_REVOLUTION;
+
 	// Start
 	galaxy::ShipParams ship_params;
-	ship_params.x0 = (self_role == galaxy::PlayerRole::ATTACKER ? 510 : 446);  // TODO
-	ship_params.x1 = 0;
-	ship_params.x2 = 0;
-	ship_params.x3 = 1;
+	ship_params.x1 =  0;
+	ship_params.x2 = 10;
+	ship_params.x3 = 10;
+
+	ship_params.x0 = 512;
+		//   res.static_info.parameter_capacity
+		// -  4 * ship_params.x1
+		// - 12 * ship_params.x2
+		// -  2 * ship_params.x3;
 	res = ctx.start(ship_params);
 
-	// TODO: setup appropreate parameter
-	Rect aubit;
-	galaxy::Vec aubit_lower(-7, -7);
-	galaxy::Vec aubit_upper(7, 7);
-
-	std::vector<std::pair<int, galaxy::ShipState>> show_info;
+	int base_shipid = 0;
 
 	// Command loop
-	const long interval = 4;
 	long counter = 0;
 	while(res.stage == galaxy::GameStage::RUNNING){
 
@@ -160,28 +181,22 @@ void move_attcker(galaxy::GalaxyContext &ctx, galaxy::GameResponse &res) {
 		// setup information
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role != res.static_info.self_role){ 
-				show_info.emplace_back(counter, sac.ship);
+			if (counter == 0) {
+				base_shipid = ship.id;
 			}
 		}
 
 		// decide turn
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role == res.static_info.self_role){ 
-				if(ship.params.x0 <= 100){ continue; }  // TODO
+			if(ship.role == res.static_info.self_role){
 
-				const auto op = show_info.back().second;
+				// shoot
 
-				if (visible(ship.pos, op.pos, aubit)) {
-					const auto pos = next_position(ship.pos, ship.vel, aubit.lower, aubit.upper);
-					cmds.shoot(ship.id, pos);
-				}
 
-				if (counter % interval == 0) {
-					const auto a = next_dir(ship.pos, ship.vel);
-					cmds.accel(ship.id, a);
-				}
+
+				// move
+
 			}
 		}
 
