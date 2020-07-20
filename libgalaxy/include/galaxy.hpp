@@ -421,6 +421,14 @@ public:
 		m_commands.push_back(std::move(root));
 	}
 
+	void fork(long ship_id, const ShipParams& new_params){
+		std::vector<Element> root;
+		root.emplace_back(3);
+		root.emplace_back(ship_id);
+		root.emplace_back(new_params.encode());
+		m_commands.push_back(std::move(root));
+	}
+
 };
 
 
