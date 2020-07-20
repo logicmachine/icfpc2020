@@ -9,7 +9,7 @@
 // Settings
 //----------------------------------------------------------------------------
 const int UNIVERSE_CHECK_ITERATIONS = 15;
-const double RELATIVE_ANGLE_THRESHOLD = -0.25;
+const double RELATIVE_ANGLE_THRESHOLD = 0.2;
 
 
 //----------------------------------------------------------------------------
