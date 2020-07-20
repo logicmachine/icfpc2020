@@ -15,9 +15,6 @@ Vec operator+(const Vec &v1, const Vec &v2) {
 Vec operator-(const Vec &v1, const Vec &v2) {
 	return Vec(v1.x - v2.x, v1.y - v2.y);
 }
-bool operator<(const Vec &v1, const Vec &v2) {
-	return v1.x != v2.x ? v1.x < v2.x : v1.y < v2.y;
-}
 
 }
 
@@ -72,6 +69,7 @@ Vec compute_accel(const Vec& p, const Vec& d, long ur, long gr){
 		return Vec();
 	}
 }
+
 
 
 bool alive(Vec pos, Vec vel, int turn, int rad) {
