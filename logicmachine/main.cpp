@@ -1,5 +1,6 @@
 #include <tuple>
 #include <map>
+#include <random>
 #include <cmath>
 
 #include "galaxy.hpp"
@@ -16,6 +17,8 @@ const int RELATIVE_ANGLE_THRESHOLD = 4;
 // Utilities
 //----------------------------------------------------------------------------
 using Vec = galaxy::Vec;
+
+static std::default_random_engine g_random_engine;
 
 Vec gravity(const Vec p){
 	const long abs_x = std::abs(p.x), abs_y = std::abs(p.y);
@@ -80,16 +83,27 @@ void defender(
 	res = ctx.start(ship_params);
 
 	// Command loop
+	const long randomize_threshold = res.static_info.galaxy_radius + 32;
 	while(res.stage == galaxy::GameStage::RUNNING){
 		res.dump(std::cerr);
 		galaxy::CommandListBuilder cmds;
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
 			if(ship.role != res.static_info.self_role){ continue; }
-			const auto accel = compute_accel(
+			auto accel = compute_accel(
 				ship.pos, ship.vel,
 				res.static_info.universe_radius,
 				res.static_info.galaxy_radius);
+			const auto abs_x = std::abs(ship.pos.x);
+			const auto abs_y = std::abs(ship.pos.y);
+			if(std::max(abs_x, abs_y) >= randomize_threshold || (abs_x == abs_y && ship.vel == Vec())){
+				const auto random = (g_random_engine() & 3);
+				if(random == 0){
+					accel.x = 0;
+				}else if(random == 1){
+					accel.y = 0;
+				}
+			}
 			if(accel.x != 0 || accel.y != 0){
 				cmds.accel(ship.id, accel);
 			}
@@ -100,7 +114,7 @@ void defender(
 
 
 //----------------------------------------------------------------------------
-// Attacker
+// Attacker (Simple-Shooter)
 //----------------------------------------------------------------------------
 double check_relative_angle(const Vec& a, const Vec& b){
 	if(a == b){ return true; }
@@ -207,7 +221,7 @@ void attacker(
 	// Command loop
 	const long bound_radius = std::max(
 		res.static_info.universe_radius / 3,
-		res.static_info.galaxy_radius + 16);
+		res.static_info.galaxy_radius + 32);
 
 	HistoricalPredictor historical_predictor;
 	InertialPredictor inertial_predictor;
@@ -217,7 +231,7 @@ void attacker(
 		galaxy::CommandListBuilder cmds;
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role == res.static_info.self_role){
+			if(ship.role == res.static_info.self_role && ship.params.x3 != 0){
 				// Acceleration
 				const auto accel = compute_accel(
 					ship.pos, ship.vel, bound_radius, res.static_info.galaxy_radius);
@@ -226,7 +240,7 @@ void attacker(
 				if(ship.x5 > 0){ continue; } // TODO
 				for(const auto& target_sac : res.state.ships){
 					const auto& target = target_sac.ship;
-					if(target.role != res.static_info.self_role){
+					if(target.role != res.static_info.self_role && target.params.x3 != 0){
 						std::pair<bool, Vec> prediction;
 						prediction = historical_predictor.predict(target);
 						if(!prediction.first){
@@ -241,7 +255,7 @@ void attacker(
 		}
 		for(const auto& sac : res.state.ships){
 			const auto& ship = sac.ship;
-			if(ship.role != res.static_info.self_role){
+			if(ship.role != res.static_info.self_role && ship.params.x3 != 0){
 				historical_predictor.update(ship);
 				inertial_predictor.update(ship);
 			}
