@@ -5,7 +5,8 @@ def main(args):
     print('Usage: python local_run.py room_creater.out attacker.out defender.out')
     print('  python local_run.py ./room_creater.out ./accel.out ./idle.out')
     return
-
+  
+  hand ='hand'
   endpoint = 'https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=b0a3d915b8d742a39897ab4dab931721'
   room_creater_exe = args[1]
   attacker_exe = args[2]
@@ -21,10 +22,14 @@ def main(args):
       # with open('log_attacker_stdout.txt', 'w') as attacker_log_stdout, open('log_defender_stdout.txt', 'w') as defender_log_stdout:
       print('run:', [attacker_exe, endpoint, attacker_key])
       print('run:', [defender_exe, endpoint, defender_key])
-      ap = subprocess.Popen([attacker_exe, endpoint, attacker_key], stderr=attacker_log)
-      dp = subprocess.Popen([defender_exe, endpoint, defender_key], stderr=defender_log)
-      ap.communicate()
-      dp.communicate()
+      procs = []
+      if attacker_exe != hand:
+        procs.append(subprocess.Popen([attacker_exe, endpoint, attacker_key], stderr=attacker_log))
+      if defender_exe != hand:
+        procs.append(subprocess.Popen([defender_exe, endpoint, defender_key], stderr=defender_log))
+      
+      for proc in procs:
+        proc.communicate()
 
   print()
   print('keys:', attacker_key, defender_key)
