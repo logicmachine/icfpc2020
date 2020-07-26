@@ -28,7 +28,7 @@
 ### Galaxy Pad (Web application using Node.js)
 * https://github.com/logicmachine/icfpc2020/tree/master/galaxypad
 
-### Our Workflow
+### Our workflow
 
 #### Day 1
 * We were not known the detail rule, so spent comfortably while studying on the functional programming during the first few hours.
