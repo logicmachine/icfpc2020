@@ -3,11 +3,9 @@
 ## Profile
 
 ### Team
-
 * fixstars
 
 ### Members
-
 * Noriyuki Futatsugi (foota)
 * Takaaki Hiragushi (logicmachine)
 * Yuichi Sayama (xyz600)
@@ -18,24 +16,33 @@
 
 ## Development
 
-### Galaxy Evaluator (library for C++)
+### Galaxy Evaluator
 
+#### Interpreter (C++ and JavaScript)
+* https://github.com/logicmachine/icfpc2020/tree/master/interpreter
+* https://github.com/logicmachine/icfpc2020/tree/master/js-interpreter
+
+#### Library (C++)
 * https://github.com/logicmachine/icfpc2020/tree/master/libgalaxy
 
-
 ### Galaxy Pad (Web application using Node.js)
-
 * https://github.com/logicmachine/icfpc2020/tree/master/galaxypad
 
-### Our approaches
+### Our Workflow
 
-* 
+#### Day 1
+* We were not known the detail rule, so spent comfortably while studying on the functional programming during the first few hours.
+* One of our members wrote up the interpreter of the galaxy in half a day! It's great!
+* Discovered some drawings from the galaxy. Huh?
 
+#### Day 2
+* We almost understood tutorials.
+* One of our members wrote up the Galaxy Pad using the Node.js in a few hours. Marvelous!
+* And then, we played games on the Galaxy Pad during a several hours. It was fun!
 
-## Memo
+#### Day 3
+* We analyzed game systems, protocols, parameters.
+* We thought deeply about strategies of the final tournament and wrote their programs.
 
-> In the next 7 days, we kindly ask you to do the following:
-> 
-> Make your repository (specified in the team profile) public. We've obfuscated your email in the profile so don't be afraid to leak your API key. Don't forget to commit your “galaxy evaluator” (or “Galaxy Pad”), if any, to the repository. Add a README, share your experience, pictures, videos, and write-ups. Definitely do so, if you wish your team to be considered for a prize.
-> 
-> Optionally, leave feedback (the link will appear right here.)
+This contest was one of the best ICFP Programming Contests, and so we had good time in this period.
+Thank you so much, the organizers!
